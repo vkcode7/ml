@@ -7,7 +7,9 @@ To use venv in your project, in your terminal, create a new project folder, cd t
 python<version> -m venv <virtual-environment-name>
   
  mkdir projectA
+  
  cd projectA
+  
  python3.8 -m venv env
   
 When you check the new projectA folder, you will notice that a new folder called env has been created. env is the name of our virtual environment, but it can be named anything you want.
