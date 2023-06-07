@@ -24,3 +24,8 @@ important commands:
   pip freeze > requirements.txt
   ~ pip install -r requirements.txt
 
+To use this virtual env in Spyder:
+  
+Preferences -> Python Interpreter
+
+https://stackoverflow.com/questions/30170468/how-to-run-spyder-in-virtual-environment
