@@ -29,3 +29,5 @@ To use this virtual env in Spyder:
 Preferences -> Python Interpreter
 
 https://stackoverflow.com/questions/30170468/how-to-run-spyder-in-virtual-environment
+  
+Cloning a GIT reopo: git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY
