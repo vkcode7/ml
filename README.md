@@ -18,7 +18,7 @@ Activate it using:
 source env/bin/activate
   
 deactivate:
- ~ deactivate
+deactivate
 
 important commands:
   pip freeze > requirements.txt
