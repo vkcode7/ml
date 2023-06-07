@@ -4,7 +4,7 @@ ML projects
 How to create a virtual env in python?
 To use venv in your project, in your terminal, create a new project folder, cd to the project folder in your terminal, and run the following command:
 
-python<version> -m venv <virtual-environment-name>
+python<version> -m venv virtual-environment-name
   
  mkdir projectA
   
