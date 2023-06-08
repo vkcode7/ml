@@ -31,3 +31,6 @@ Preferences -> Python Interpreter
 https://stackoverflow.com/questions/30170468/how-to-run-spyder-in-virtual-environment
   
 Cloning a GIT reopo: git clone https://github.com/YOUR-USERNAME/YOUR-REPOSITORY
+
+James Briggs: https://github.com/jamescalam/transformers/tree/main
+Learn next-generation NLP with transformers for sentiment analysis, Q&A, similarity search, NER, and more
