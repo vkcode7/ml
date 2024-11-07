@@ -929,7 +929,7 @@ class StatementGroupProcessor:
                             
                     self.stmt_df.at[first_index_value + pos, 'SubGroup'] = prevItem   
                     if pd.isna(df_group.iloc[pos]['ItemType']):
-                        self.stmt_df.at[first_index_value + prevItemLoc, 'ItemType'] = 'SubGroup'
+                        self.stmt_df.at[first_index_value + prevItemLoc, 'ItemType'] = 'SubGroup_1'
                 else:
                     break #somehow indent has decreased
                     
@@ -944,7 +944,7 @@ class StatementGroupProcessor:
                 if self.grouping_row(row, col_count_page_onwards): 
                     groupname = row['Items']
                     groupindex = bs_index
-                    self.stmt_df.at[groupindex, 'ItemType'] = 'SubGroup'
+                    self.stmt_df.at[groupindex, 'ItemType'] = 'SubGroup_1'
 
                     print(f"Found a group with name: {groupname} at index {groupindex}")
                     continue
@@ -959,9 +959,82 @@ class StatementGroupProcessor:
                         groupindex = -1
                         groupname = None
 
+    def identify_subgroups_level_2(self):
+        # Get distinct values from 'Group' column
+        #distinct_groups = self.stmt_df['Group'].replace('', np.nan).dropna().unique()
+        #print(distinct_groups) 
+        self.stmt_df['SubGroup_2'] = ""
+
+        distinct_groups = self.stmt_df['Group'].replace('', np.nan).dropna().unique()
+        for group in distinct_groups:
+            if group == np.nan:
+                continue
+                
+            print(f"\n\nGroup name is {group}")
+            df_group_items = self.stmt_df[self.stmt_df['Group'] == group]
+            distinct_sub_groups = df_group_items['SubGroup'].replace('', np.nan).dropna().unique()
+            for subgroup in distinct_sub_groups:
+                if subgroup == np.nan:
+                    continue
+            
+                df_group = self.stmt_df[(self.stmt_df['Group'] == group) & (self.stmt_df['SubGroup'] == subgroup)]
+
+                print(f"\nGroup: {group}, SubGroup: {subgroup}")
+                print(df_group)  # DataFrame for each Group and SubGroup
+    
+                #Iterate through rows in each group_df and if you find a subsequent row that 
+                # has higher Indent value then that means it is a SubGroup_2
+                
+                first_index_value = df_group.index[0]
+                # Initialize prevItem and prevIndent with the first row
+                prevItem = df_group.iloc[0]['Items']
+                prevItemLoc = 0
+                prevIndent = df_group.iloc[0]['Indent']
+                prev_page = df_group.iloc[0]['Page']
+                
+                print(f"First index value is {first_index_value}")
+                
+                # Iterate through the DataFrame starting from the 2nd row
+                for pos in range(1, len(df_group)):
+                    currentIndent = df_group.iloc[pos]['Indent']
+                    item_page = df_group.iloc[pos]['Page']
+    
+                    if (item_page > prev_page):
+                        print(f"\n\nNew page is encountered: prev {prev_page}, new {item_page}")
+                        print("Edge case here: difficult to figure out if this is a Level 2 subgroup or Level 1")
+                        
+                        min_indent = df_group['Indent'].min()
+                        max_indent = df_group['Indent'].max()
+                        
+                        prev_page = item_page
+                        #check indent of new page and see if it is already indented
+                        if currentIndent > min_indent and min_indent < max_indent:
+                            prevIndent = 0 #continue using prev item
+                        elif min_indent < max_indent and currentIndent == min_indent: #readjust
+                            prevIndent = currentIndent
+                        break
+                    
+                    if currentIndent == prevIndent:
+                        # Update prevItem and prevIndent with the current row's values
+                        prevItem = df_group.iloc[pos]['Items']
+                        prevItemLoc = pos
+                        prevIndent = currentIndent
+                        print(f"Updated prevItem to '{prevItem}' and prevIndent to {prevIndent}")
+                    elif currentIndent > prevIndent:
+                        # Keep iterating without updating
+                        print(f"Processing row {first_index_value + pos}, Indent {currentIndent} > prevIndent {prevIndent}, prevItem is {prevItem}")
+                                
+                        self.stmt_df.at[first_index_value + pos, 'SubGroup_2'] = prevItem   
+                        if pd.isna(df_group.iloc[pos]['ItemType']):
+                            self.stmt_df.at[first_index_value + prevItemLoc, 'ItemType'] = 'SubGroup_2'
+                    else:
+                        break #somehow indent has decreased
+
     def identify_groups_and_subgroups(self):
         self.identify_groups()
         self.identify_subgroups()
+        self.identify_subgroups_level_2()
+
         return self.stmt_df
 
 
@@ -1154,6 +1227,24 @@ class MappingsProcessor:
 
 
 class FinancialStmtProcessor:
+    
+    def clean_financial_columns(self, dataframe):
+        dynamic_columns = dataframe.columns[1:dataframe.columns.get_loc('Page')]
+        
+        # Iterate through each dynamic column and apply transformations
+        for col in dynamic_columns:
+            # Remove any extraneous spaces and commas
+            dataframe[col] = dataframe[col].str.strip().replace(',', '', regex=True)
+            dataframe[col] = dataframe[col].replace('[\$,]', '', regex=True)  # Remove commas and dollar signs
+            
+            # Convert numbers in (1234), (1,234), (1234.56), (1,234.56) format to -1234, -1234, -1234.56, -1234.56
+            dataframe[col] = dataframe[col].replace(r'\(([\d,]+\.\d+|\d+)\)', r'-\1', regex=True)
+            
+            # Convert to numeric (handles cases where values are still non-numeric or NaN)
+            dataframe[col] = pd.to_numeric(dataframe[col], errors='coerce')
+        
+        return dataframe
+
     def __init__(self, doc_type: DocumentType, inpath, outpath, filename):
         self.pdf_reader = None
         
@@ -1178,7 +1269,10 @@ class FinancialStmtProcessor:
                 self.pdf_reader.get_temp_path(),
                 statement_df)
         
-            processed_df = stmt_group_processor.identify_groups_and_subgroups()
+            processed_df_groups_subgroups = stmt_group_processor.identify_groups_and_subgroups()
+            
+            # Clean the numbers
+            processed_df = self.clean_financial_columns(processed_df_groups_subgroups)
         
             PdfUtils.save_df_as_csv(processed_df, self.pdf_reader.get_temp_csv_filepathname())
 
@@ -1234,9 +1328,9 @@ def main(args=None):
         #args = argparse.Namespace(file="Maravai.pdf", input_dir="./in", output_dir="./out", type="10-K")
         
         args_list = [
+            ["-f", "BellRing.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "Maravai.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "PostHoldings.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
-            ["-f", "BellRing.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
         ]
         
         for arg in args_list:
@@ -1252,18 +1346,54 @@ def main(args=None):
     else:
         args = parser.parse_args(args)
 
-    # Call the processing function with arguments
-    output_filepath = process_file(args.file, args.input_dir, args.output_dir, args.type)
-    print(output_filepath)
+        # Call the processing function with arguments
+        output_filepath = process_file(args.file, args.input_dir, args.output_dir, args.type)
+        print(output_filepath)
     
 if __name__ == "__main__":
     main()
 # In[]
+
+def get_final_output(df):
+    filtered_df = df[df['Standardized Line Item'].notna() & (df['Standardized Line Item'] != '')].copy()
+    
+    # Iterate through the filtered DataFrame row by row
+    for idx, row in filtered_df.iterrows():
+        # Check if ItemType is 'SubGroup_1' or 'SubGroup_2'
+        if row['ItemType'] in ['SubGroup_1', 'SubGroup_2']:
+            # Get the 'Items' and 'Group' values from the current row
+            items_value = row['Items']
+            group_value = row['Group']
+            colname = 'SubGroup'
+            if(row['ItemType'] == 'SubGroup_2'):
+                colname ='SubGroup_2'
+                
+            # Sum all the dynamic columns in the original DataFrame where Group and Items match
+            dynamic_columns = df.columns[1:df.columns.get_loc('Page')]
+            matching_rows = df[(df['Group'] == group_value) & (df[colname] == items_value)]
+            sum_values = matching_rows[dynamic_columns].sum()
+    
+            for col in dynamic_columns:
+                filtered_df.at[idx, col] = sum_values[col]
+            
+            # Output the result for the current row
+            print(f"Sum of dynamic columns for Group='{group_value}', Items='{items_value}':\n{sum_values}\n")
+
+    return filtered_df
+
 dfs = []
+filtered_dfs = []
 for filename in output_files:
+    print(f"\n\n\nDisplaying CSV filedata: {filename}")
     df = pd.read_csv(filename)
     dfs.append(df)
-    print(df.head(5))
+    
+    filtered_df = get_final_output(df)
+    filtered_dfs.append(filtered_df)
+    PdfUtils.print_df(filtered_df)
 
 
 # In[]
+print("Done")
+
+# Filtered copy of DataFrame where 'Standardized Line Item' is non-blank and non-NA
