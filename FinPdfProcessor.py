@@ -200,6 +200,7 @@ class PdfUtils:
 class PdfTableReader:
     # Constant declaration
     MAX_PAGES_TO_SCAN_FOR_INDEX_TABLE = 15
+    MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT = 25
     MAX_ROWS_TO_SCAN_FOR_COLUMN_META_INFO = 5
     def __init__(self, inpath, outpath, filename):
         if not filename:
@@ -215,6 +216,7 @@ class PdfTableReader:
         self.outpath = outpath
         
         self.page_offset = 0
+        self.total_pages = 0
         
         filename, ext = os.path.splitext(filename)
         if ext and ext.lower() != ".pdf":
@@ -252,6 +254,14 @@ class PdfTableReader:
     
     def get_standard_csv_filepathname(self):
         return self.std_filepath
+    
+    def get_total_pages(self):
+        if self.total_pages == 0:
+            pdf_document = fitz.open(self.pdf_filepath)
+            # Return the total number of pages
+            self.total_pages = pdf_document.page_count
+            
+        return self.total_pages
     
     def calculate_page_offset(self):
         try:
@@ -360,6 +370,15 @@ class PdfTableReader:
             print(f"search_itemized_table(): No matching rows found for {string1} and {string2}")
             return None, None
   
+    def ensure_integer(self, value):
+        if isinstance(value, int):  # Check if the variable is already an integer
+            return value
+        try:
+            return int(value)  # Attempt to convert to an integer
+        except ValueError:
+            raise ValueError(f"Cannot convert {value} to an integer.")  # Handle invalid conversion
+  
+  
     def get_adjusted_page(self, toc_page, search_text):
         doc = fitz.open(self.pdf_filepath)
 
@@ -379,14 +398,29 @@ class PdfTableReader:
                             print(f"Found link associated with '{search_text}': {link}")
                             if "page" in link:
                                 print(f"Link points to page: {link['page']}")
-                                return link['page'] + 1
+                                return self.ensure_integer(link['page'])
 
         return 0
   
+    def scan_adjacent_pages(self, page, text):
+        scanned_page = self.scan_page_for_content(page, text, 1)       
+        if(scanned_page > 0):
+            return scanned_page
+        else:
+            scanned_page = self.scan_page_for_content(page - 1, text, 1)       
+            if(scanned_page > 0):
+                return scanned_page
+            else:
+                scanned_page = self.scan_page_for_content(page + 1, text, 1)       
+                if(scanned_page > 0):
+                    return scanned_page
+            
+        return 0
+    
     # Function to extract text from the PDF one page at a time and look for the required parts
     def find_page_for_item_x_with_parts(self, item, statement_type, substatement):
         page_number = 1
-
+        adjusted_page = 0
         # Iterate through each page individually
         while True:
             try:
@@ -410,20 +444,24 @@ class PdfTableReader:
                         search_text = statement_type
                         if nested == True:
                             search_text = substatement
+                        try:
+                            adjusted_page = self.get_adjusted_page(page_number, search_text)
+                        except Exception as e:
+                            print(f"An unexpected error occurred: {e}")
+                            adjusted_page = 0
                             
-                        adjusted_page = self.get_adjusted_page(page_number, search_text)
                         if adjusted_page == 0:
                             adjusted_page = content_page
                         
-                        
                         scan_page = adjusted_page
-                        while scan_page < adjusted_page + 10:
-                            isFound = self.check_page_for_data(scan_page, search_text)
-                            if isFound is True:
-                                self.page_offset = scan_page - int(content_page)
-                                return content_page, scan_page, nested
-                            
-                            scan_page = scan_page + 1 
+                        
+                        scanned_page = self.scan_adjacent_pages(scan_page, substatement)
+                        if( scanned_page == 0):
+                            scanned_page = self.scan_page_for_content(scan_page + 2, substatement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_INDEX_TABLE)
+
+                        if( scanned_page > 0):
+                            self.page_offset = scanned_page - int(content_page)
+                            return content_page, scanned_page, nested
                         
                         return None, 0, False
                 # Increment page number to continue search
@@ -521,8 +559,8 @@ class PdfTableReader:
         page_text_1 = PdfUtils.pdf_to_text_with_ghostscript(self.pdf_filepath, output_text_path, first_page, first_page)
         page_text_2 = PdfUtils.pdf_to_text_with_ghostscript(self.pdf_filepath, output_text_path, next_page, next_page)
 
-        if(statement_type in page_text_1):
-            if(statement_type in page_text_2):
+        if(statement_type.lower() in page_text_1.lower()):
+            if(statement_type.lower() in page_text_2.lower()):
                 print(f"are_consecutive_pages retruns true as both pages has >>{statement_type}<< in it")
                 return True
 
@@ -584,9 +622,25 @@ class PdfTableReader:
             if( content_page is not None):
                 return self.get_table_as_df(int(content_page) + self.page_offset, statement_type)
 
-    def find_statement_from_subtable(self, page_number, statement):
+    def scan_page_for_content(self, page_number, search_text, number_of_pages_to_scan):
+        scan_page = page_number
+        max_pages_to_scan = page_number + number_of_pages_to_scan
+        if(self.get_total_pages() < max_pages_to_scan + 1):
+            max_pages_to_scan = self.get_total_pages() - 1
+            
+        while scan_page < max_pages_to_scan:
+            isFound = self.check_page_for_data(scan_page, search_text)
+            if isFound is True:
+                return scan_page
+            
+            scan_page = scan_page + 1  
+        
+        return 0
+
+    def find_statement_from_subtable(self, page_number, statement):  
         tables = camelot.read_pdf(self.pdf_filepath, pages=str(page_number), flavor='stream')
 
+        content_page = None
         # Iterate over the extracted tables
         for table_index in range(tables.n):
             # Convert the table to a DataFrame
@@ -597,7 +651,26 @@ class PdfTableReader:
 
             print(f"content_page is {content_page}")
             if( content_page is not None):
-                return self.get_table_as_df(int(content_page) + self.page_offset, statement)
+                page = self.get_adjusted_page(page_number, statement)
+                if page == 0:
+                    try:
+                        page = int(content_page)  # Attempt to convert the string to an integer
+                        page = page + self.page_offset
+                        scanned_page = self.scan_page_for_content(page, statement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT)       
+                        if(scanned_page > 0):
+                            page = scanned_page
+                    except ValueError:
+                        # Look for page in subsequent pages
+                        page = self.scan_page_for_content(page_number + 1, statement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT)       
+                else:
+                    scanned_page = self.scan_page_for_content(page, statement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT)       
+                    if(scanned_page > 0):
+                        page = scanned_page
+        
+        if(page > 0):
+            return self.get_table_as_df(page, statement)
+        
+        return None
 
     
     def get_item8_statement(self, statement):
@@ -1475,27 +1548,32 @@ class FinancialStmtProcessor:
             
 # In[]
 
-output_files = []
+output_files = {}
 
 def process_file(filename, input_dir, output_dir, doc_type):
-    input_path = os.path.join(input_dir, filename)
+    try:
+        input_path = os.path.join(input_dir, filename)
+        
+        if not os.path.exists(input_path):
+            print(f"Error: File '{input_path}' does not exist.")
+            return
     
-    if not os.path.exists(input_path):
-        print(f"Error: File '{input_path}' does not exist.")
-        return
-
-    os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(output_dir, exist_ok=True)
+        
+        doctype_enum = DocumentType.from_string(doc_type)
+        
+        if not doctype_enum:
+            print("Document type is invalid. Supported doc types are 10-K, 10-Q or HF")
     
-    doctype_enum = DocumentType.from_string(doc_type)
+        processor = FinancialStmtProcessor(doctype_enum, input_dir, output_dir, filename)
+        output_filepath = processor.run()
     
-    if not doctype_enum:
-        print("Document type is invalid. Supported doc types are 10-K, 10-Q or HF")
+        print(f"Processed file saved to: {output_filepath}")
+        return output_filepath
+    except Exception as e:
+        print(f"Failed to process file: {filename}")
 
-    processor = FinancialStmtProcessor(doctype_enum, input_dir, output_dir, filename)
-    output_filepath = processor.run()
-
-    print(f"Processed file saved to: {output_filepath}")
-    return output_filepath
+    return None
 
 def main(args=None):
     # Set up argument parsing
@@ -1510,10 +1588,12 @@ def main(args=None):
         #args = argparse.Namespace(file="Maravai.pdf", input_dir="./in", output_dir="./out", type="10-K")
         
         args_list = [
-            #["-f", "KraftHeinz.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
-            #["-f", "BellRing.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "GrafTech.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "GlobalNetLease.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "KraftHeinz.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "BellRing.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "Maravai.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
-            #["-f", "PostHoldings.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "PostHoldings.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
         ]
         
         for arg in args_list:
@@ -1524,8 +1604,13 @@ def main(args=None):
             args = argparse.Namespace(**args_dict)
             # Call the processing function with arguments
             output_filepath = process_file(args.file, args.input_dir, args.output_dir, args.type)
-            output_files.append(output_filepath)
-            print(f"Processed file: {output_filepath}")
+            if output_filepath is None:
+                output_files[args.file] = output_filepath
+                #output_files.append(output_filepath)
+                print(f"Failed to process file: {args.file}")
+            else:
+                output_files[args.file] = output_filepath
+                print(f"Processed file: {output_filepath}")           
     else:
         args = parser.parse_args(args)
 
@@ -1533,10 +1618,39 @@ def main(args=None):
         output_filepath = process_file(args.file, args.input_dir, args.output_dir, args.type)
         print(output_filepath)
     
+    print("Done with processing")
+    
 if __name__ == "__main__":
     main()
+    print("Done with main")
 # In[]
+dfs = []
 
+expected_rows = {}
+expected_rows['GlobalNetLease.pdf'] = 70
+expected_rows['KraftHeinz.pdf'] = 48
+expected_rows['BellRing.pdf'] = 34
+expected_rows['Maravai.pdf'] = 58
+expected_rows['PostHoldings.pdf'] = 59
+expected_rows['GrafTech.pdf'] = 48
+
+
+for key, value in output_files.items():
+    print(f"File: {key}, Output path: {value}")
+    
+for key, value in output_files.items():
+    print(f"Displaying CSV filedata: {value}")
+    if(value is None):
+        print(f"ERROR: Failed to process file {key}")
+        continue
+    
+    df = pd.read_csv(value)
+    dfs.append(df)
+    if(df.shape[0] != expected_rows[key]):
+        print(f"{key}: MISMATCH!!!: The number of rows in dataframe {df.shape[0]} vs expected {expected_rows[key]}")
+    #PdfUtils.print_df(df)
+
+# In[]
 def get_final_output(df):
     filtered_df = df[df['Standardized Line Item'].notna() & (df['Standardized Line Item'] != '')].copy()
     
@@ -1560,21 +1674,34 @@ def get_final_output(df):
                 filtered_df.at[idx, col] = sum_values[col]
             
             # Output the result for the current row
-            print(f"Sum of dynamic columns for Group='{group_value}', Items='{items_value}':\n{sum_values}\n")
+            # print(f"Sum of dynamic columns for Group='{group_value}', Items='{items_value}':\n{sum_values}\n")
+
+    filtered_df = filtered_df.drop(['Page', 'Indent', 'SubGroup', 'SubGroup_2'], axis=1)
 
     return filtered_df
 
-dfs = []
-filtered_dfs = []
-for filename in output_files:
-    print(f"\n\n\nDisplaying CSV filedata: {filename}")
-    df = pd.read_csv(filename)
-    dfs.append(df)
+# In[]
+def generate_final_datafiles():
+    filtered_dfs = []
+    for filename in output_files.values():
+        print(f"\n\n\nDisplaying CSV filedata: {filename}")
+        df = pd.read_csv(filename)
+        filtered_df = get_final_output(df)
+        filtered_df.shape
     
-    filtered_df = get_final_output(df)
-    filtered_dfs.append(filtered_df)
-    PdfUtils.print_df(filtered_df)
+        filtered_dfs.append(filtered_df)
+        PdfUtils.print_df(filtered_df)
+    
+        # Split the filename into parts before and after the last underscore
+        base, ext = os.path.splitext(filename)  # Separate base and extension
+        parts = base.rsplit('_', 1)  # Split at the last underscore
+        
+        # Insert "_final_" and reassemble the filename
+        new_filename = f"{parts[0]}_final_{parts[1]}{ext}"
+    
+        PdfUtils.save_df_as_csv(filtered_df, new_filename)
 
+generate_final_datafiles()
 
 # In[]
 print("Done")
