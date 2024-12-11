@@ -378,8 +378,41 @@ class PdfTableReader:
         except ValueError:
             raise ValueError(f"Cannot convert {value} to an integer.")  # Handle invalid conversion
   
+    def ensure_integer_or_assign_zero(self, value):
+        if isinstance(value, int):  # Check if the variable is already an integer
+            return value
+        try:
+            return int(value)  # Attempt to convert to an integer
+        except ValueError:
+            return 0
+        
+        return 0
+
+
+    def get_hyperlinked_page(self, page, search_text):
+        doc = fitz.open(self.pdf_filepath)
+
+        # Extract links from the first page
+        index_page = doc[page - 1] #fitz is zero based
+
+        rects = index_page.search_for(search_text)
+        
+        if rects:
+            # Extract all links from the page
+            links = index_page.get_links()
+            if links:
+                for rect in rects:
+                    for link in links:
+                        link_rect = fitz.Rect(link["from"])
+                        if rect.intersects(link_rect):
+                            print(f"Found link associated with '{search_text}': {link}")
+                            if "page" in link:
+                                print(f"Link points to page: {link['page']}")
+                                return self.ensure_integer(link['page'])
+
+        return 0
   
-    def get_adjusted_page(self, toc_page, search_text):
+    def get_adjusted_page_REMOVE(self, toc_page, search_text):
         doc = fitz.open(self.pdf_filepath)
 
         # Extract links from the first page
@@ -417,8 +450,247 @@ class PdfTableReader:
             
         return 0
     
+    def scan_for_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(self, page_no, ignore_spaces=False):
+        text = "FINANCIAL STATEMENTS AND SUPPLEMENTARY DATA"
+        scanned_page = self.scan_page_for_content(page_no, text, 1, ignore_spaces)       
+        if(scanned_page == 0):
+            scanned_page = self.scan_page_for_content(page_no - 1, text, 1, ignore_spaces)       
+            if(scanned_page == 0):
+                scanned_page = self.scan_page_for_content(page_no + 1, text, self.MAX_PAGES_TO_SCAN_FOR_INDEX_TABLE, ignore_spaces)       
+                if(scanned_page == 0):
+                    print(f"{text} not found on pages {page_no-1}, {page_no}, {page_no+2}")
+                    print("Assuming there is no sub table")
+        
+        if scanned_page == 0 and ignore_spaces == False:
+            scanned_page = self.scan_for_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(page_no, True)
+            return scanned_page
+        
+        return scanned_page
+
+    
+    def get_page_from_the_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(self, page_number, statement):
+        tables = camelot.read_pdf(self.pdf_filepath, pages=str(page_number), flavor='stream')
+
+        statement_page = 0
+        # Iterate over the extracted tables
+        for table_index in range(tables.n):
+            # Convert the table to a DataFrame
+            df = tables[table_index].df
+            if((df.shape[0] == 0) or (df.shape[1] < 2)):
+                continue
+
+            print(f"PRINTING FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table with index {table_index}")
+            PdfUtils.print_df(df)
+            
+            # Define the patterns to search for
+            patterns = ["Consolidated Statements of", "Consolidated Balance Sheets"]
+            
+            # Use apply() to search across entire rows
+            matching_rows = df.apply(
+                lambda row: row.astype(str).str.contains("|".join(patterns), case=False, regex=True).any(),
+                axis=1
+            )
+            
+            # Count the rows that match
+            count = matching_rows.sum()
+            
+            if count < 2:
+                continue
+            
+            content_page = self.search_toc(df, statement)
+            
+            print(f"content_page is {content_page}")
+            if( content_page is not None):
+                statement_page = self.get_hyperlinked_page(page_number, statement)
+                if statement_page == 0:
+                    try:
+                        statement_page = int(content_page)  # Attempt to convert the string to an integer
+                        #page = page + self.page_offset
+                        #scanned_page = self.scan_page_for_content(page, statement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT)       
+                        #if(scanned_page > 0):
+                        ##    page = scanned_page
+                    except ValueError:
+                        statement_page = 0
+                        # Look for page in subsequent pages
+                        #page = self.scan_page_for_content(page_number + 1, statement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT)       
+                #else:
+                #    scanned_page = self.scan_page_for_content(page, statement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_CONSOLIDATED_STATEMENT)       
+                #    if(scanned_page > 0):
+                #        page = scanned_page
+                
+            return True, statement_page
+
+        return False, statement_page
+    
     # Function to extract text from the PDF one page at a time and look for the required parts
     def find_page_for_item_x_with_parts(self, item, statement_type, substatement):
+        page_number = 1
+        adjusted_page = 0
+        # Iterate through each page individually
+        while True:
+            try:
+                if page_number > PdfTableReader.MAX_PAGES_TO_SCAN_FOR_INDEX_TABLE:
+                    print("No table found in first {}".format(PdfTableReader.MAX_PAGES_TO_SCAN_FOR_INDEX_TABLE))
+                    return 0
+                
+                try:
+                    # Extract tables from the PDF
+                    tables = camelot.read_pdf(self.pdf_filepath, pages=str(page_number), flavor='stream', edge_tol=0)
+                except Exception as e:
+                    print(f"There was error processing page {page_number}: {e}")
+                    # Increment page number to continue search
+                    page_number += 1
+                    continue
+
+                    
+                print(f"Total tables extracted from page {page_number}: {tables.n}")
+
+                # Iterate over the extracted tables
+                for table_index in range(tables.n):
+                    # Convert the table to a DataFrame
+                    df = tables[table_index].df
+
+                    if(df.shape[0] == 0 or df.shape[1] == 0):
+                        continue
+                    
+                    # Step 1:
+                    result = df[df.apply(lambda row: (row.astype(str).str.contains(item).any() and
+                                                      row.astype(str).str.contains(statement_type).any()), axis=1)]
+                    
+                    result = df[df.apply(lambda row: (
+                            row.astype(str).str.contains(item, case=False).any() and
+                            row.astype(str).str.contains(statement_type, case=False).any()
+                            ), axis=1)]
+                                            
+                    if result.empty:
+                        continue
+                    
+                    # Found "Item 8: Financial Statements and Supplementary Data"; this is our main ToC page
+                    # We are here means that DF has Item (ex 8) and also the statement_type (ex: Financial Statements and Supplementary Data)
+                    # Lets continue looking into it further
+
+                    if substatement is None:
+                        print(f"WARNING: substatement passed is None, such cases are not yet handled, bailing ouy!!!")
+                        break
+                        
+                    sub_table_page_no = 0
+                    sub_stmt_page_no = 0
+                    
+                    #Process for "Consolidated Statements of Cash Flows"
+                    # Step 2: Get the index of the first matching row
+                    start_index = result.index[0]  #row where parent item is found
+                    
+                    # Step 3: Filter rows starting from start_index + 1
+                    subsequent_df = df.iloc[start_index + 1:]
+                    
+                    nested = False
+                    # Step 4: Search for substatement in the subsequent rows
+                    sub_result = subsequent_df[subsequent_df.apply(lambda row: any(substatement in str(cell) for cell in row), axis=1)]
+                    if not sub_result.empty:
+                        print(f"{substatement} found in subsequent rows of main table of contents")
+                        sub_stmt_page_no = self.ensure_integer_or_assign_zero(sub_result.iloc[0, -1])
+                        print(f"value of substatement {substatement} from the last column: {sub_stmt_page_no}")
+                        nested = True
+                    else:
+                        # Extract the value from the last column (Numerical column in this case)
+                        sub_table_page_no = self.ensure_integer_or_assign_zero(result.iloc[0, -1])
+                        print(f"value of the subtable page from the last column: {sub_table_page_no}")
+                    
+
+                    """
+                    Several scenarios here
+                    1) Toc Page has Item 8: Financial Statements and Supplementary Data - X
+                        X has a subtable containing the entry "Consolidated Statements of Cash Flows"
+                        
+                    2) Toc Page has Item 8: Financial Statements and Supplementary Data - X
+                        X doesnot have a subtable containing the entry "Consolidated Statements of Cash Flows"
+                        instead it points to page Y that has subtable
+ 
+                    3) Toc Page has Item 8: Financial Statements and Supplementary Data - X
+                        X doesnot have a subtable containing the entry "Consolidated Statements of Cash Flows"
+                        instead subsequent pages have the relevalt full tables, one of them for "Consolidated Statements of Cash Flows"
+                    
+                    4) Toc Page has Item 8: Financial Statements and Supplementary Data 
+                        and underneatn Toc itself is subtable with entry "Consolidated Statements of Cash Flows"
+                        
+                        
+                    Flow
+                    does Toc has Item 8: Financial Statements and Supplementary Data?
+                    Yes:
+                        does Toc has subtable too?
+                        Yes: go read the "Consolidated Statements of Cash Flows" entry and figure out the page Y
+                        No:
+                            go to page X and look for "Financial Statements and Supplementary Data"
+                            Found?
+                            Yes: Look for Subtable
+                                Found Subtable?
+                                Yes: Good, read the stmt of cashflows in that table and figure out page Y
+                                No: Keep reading subsequent pages till you find stmt of cashflows and figure out page Y
+                    """
+
+                    # Secnario 1: Nested subtable is found in main ToC
+                    if nested is True:
+                        hyperlinked_sub_stmt_page_no = self.get_hyperlinked_page(page_number, substatement)
+                        if hyperlinked_sub_stmt_page_no == 0:
+                            hyperlinked_sub_stmt_page_no = sub_stmt_page_no #Use the one from ToC
+                        
+                        if hyperlinked_sub_stmt_page_no == 0: #still zero means we failed
+                            print(f"WARNING: The page couldnt be determined from ToC or using links, bailing out!!!")
+                        
+                        return hyperlinked_sub_stmt_page_no
+                        
+                    # There are 3 further secanrios here
+                    hyperlinked_sub_table_page_no = self.get_hyperlinked_page(page_number, statement_type)
+                    if hyperlinked_sub_table_page_no > 0:
+                        sub_table_page_no = hyperlinked_sub_table_page_no
+                        
+                    #The page of interest is hyperlinked_sub_table_page_no
+                    #it may contain a subtable or a link to subtable or subtable in the vicinity
+                    #or just direct statements that are supposed to be in subtable
+                    
+                    #Lets scan for subtable
+                    scanned_page = self.scan_for_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(sub_table_page_no)
+                    if scanned_page == 0:
+                        
+                        print(f"WARNING: The page couldnt be determined from ToC, bailing out!!!")
+                        return sub_table_page_no
+
+                    sub_table_page_no = scanned_page
+                    # 3 scenarios here
+                    # Look for subtable next
+
+                    # Scenario 2: Sub-Table exists
+                    table_found, statement_page = self.get_page_from_the_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(
+                        sub_table_page_no, substatement)
+                    
+                    if table_found is True:
+                        return statement_page
+                    
+                    # Scenario 3: There is no subtable
+                    # Scan subsequent pages for the stament directly
+                    scanned_page = self.scan_page_for_content(scanned_page, substatement, PdfTableReader.MAX_PAGES_TO_SCAN_FOR_INDEX_TABLE)
+                    if scanned_page > 0:
+                        #May be it is part of sub-table, lets check it again
+                        table_found, statement_page = self.get_page_from_the_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(
+                            scanned_page, substatement)
+                        if table_found is True:
+                            return statement_page
+                        
+                    # We are here means that sub-table is not found and instead we just ran into the statement by search
+                    return scanned_page
+                
+                # Increment page number to continue search
+                page_number += 1
+            
+            except Exception as e:
+                print(f"Reached the end of the PDF or encountered an error: {e}")
+                break
+        
+        print("The relevant page was not found.")
+        return 0  
+    
+    # Function to extract text from the PDF one page at a time and look for the required parts
+    def find_page_for_item_x_with_parts_bak(self, item, statement_type, substatement):
         page_number = 1
         adjusted_page = 0
         # Iterate through each page individually
@@ -437,6 +709,38 @@ class PdfTableReader:
                 for table_index in range(tables.n):
                     # Convert the table to a DataFrame
                     df = tables[table_index].df
+
+
+                    """
+                    Several scenarios here
+                    1) Toc Page has Item 8: Financial Statements and Supplementary Data - X
+                        X has a subtable containing the entry "Consolidated Statements of Cash Flows"
+                        
+                    2) Toc Page has Item 8: Financial Statements and Supplementary Data - X
+                        X doesnot have a subtable containing the entry "Consolidated Statements of Cash Flows"
+                        instead it points to page Y that has subtable
+ 
+                    3) Toc Page has Item 8: Financial Statements and Supplementary Data - X
+                        X doesnot have a subtable containing the entry "Consolidated Statements of Cash Flows"
+                        instead subsequent pages have the relevalt full tables, one of them for "Consolidated Statements of Cash Flows"
+                    
+                    4) Toc Page has Item 8: Financial Statements and Supplementary Data 
+                        and underneatn Toc itself is subtable with entry "Consolidated Statements of Cash Flows"
+                        
+                        
+                    Flow
+                    does Toc has Item 8: Financial Statements and Supplementary Data?
+                    Yes:
+                        does Toc has subtable too?
+                        Yes: go read the "Consolidated Statements of Cash Flows" entry and figure out the page Y
+                        No:
+                            go to page X and look for "Financial Statements and Supplementary Data"
+                            Found?
+                            Yes: Look for Subtable
+                                Found Subtable?
+                                Yes: Good, read the stmt of cashflows in that table and figure out page Y
+                                No: Keep reading subsequent pages till you find stmt of cashflows and figure out page Y
+                    """
 
                     content_page, nested = self.search_itemized_table(df, item, statement_type, substatement)
                     
@@ -541,16 +845,39 @@ class PdfTableReader:
 
         return False
 
-    def check_page_for_data(self, page, statement):
+
+    def search_with_statement_pattern(self, text, search_string):
+        # Build the dynamic regex pattern
+        # Replace "Statement" with "Statement[s]?" to account for "Statement" and "Statements"
+        pattern = re.sub(r"\bStatements?\b", r"Statement[s]?", search_string, flags=re.IGNORECASE)
+        # Perform a case-insensitive search
+        return re.search(pattern, text, re.IGNORECASE) is not None
+
+    def search_text_with_spaces_ignored(self, target, text):
+        # Remove all spaces and convert both strings to lowercase
+        normalized_target = re.sub(r"\s+", "", target).lower()
+        normalized_text = re.sub(r"\s+", "", text).lower()
+        # Check if the normalized target exists in the normalized text
+        return normalized_target in normalized_text
+
+
+    def check_page_for_data(self, page, search_text, ignore_spaces=False):
         output_text_path = os.path.join(self.temp_path, f"{self.filename}-gs.txt")
 
         page_text = PdfUtils.pdf_to_text_with_ghostscript(self.pdf_filepath, output_text_path, page, page)
 
-        if statement.lower() in page_text.lower():
-            print(f"check_page_for_data retruns true as page has >>{statement}<< in it")
-            return True
-        
-        return False
+        if ignore_spaces:
+            return self.search_text_with_spaces_ignored(search_text, page_text)
+        else:
+            return self.search_with_statement_pattern(page_text, search_text)
+
+    def check_page_for_data_list(self, page, list_text):
+        output_text_path = os.path.join(self.temp_path, f"{self.filename}-gs.txt")
+
+        page_text = PdfUtils.pdf_to_text_with_ghostscript(self.pdf_filepath, output_text_path, page, page)
+
+        # Check if every item in list_text is in page_text, ignoring case
+        return all(text.lower() in page_text.lower() for text in list_text)
 
 
     def are_consecutive_pages(self, first_page, next_page, statement_type):
@@ -581,9 +908,38 @@ class PdfTableReader:
 
     # Full pipeline to check if two tables are continuous
     def check_and_merge_tables(self, page, statement_type):
-        pages = []
         dfs = []
+        
+        min_cols = 3
+        min_rows = 5       
         # Extract tables from both pages
+        if "Consolidated Statements of Cash Flows" == statement_type:
+            min_rows = 15
+            
+        check_if_continuous = True
+        table_page = self.extract_table_from_page(page)
+        if table_page.shape[0] > min_rows and table_page.shape[1] > min_cols:
+            dfs.append(table_page)
+
+        current_page = page + 1
+
+        while check_if_continuous == True and current_page <= page + 5:
+            table_page = self.extract_table_from_page(current_page)
+            if len(dfs) > 0:
+                check_if_continuous = self.are_consecutive_pages(current_page, current_page - 1, statement_type)
+                if check_if_continuous is False:
+                    # Check if tables are structurally continuous
+                    check_if_continuous = self.are_tables_continuous(dfs[-1], table_page)
+                
+                if check_if_continuous is True:
+                    print(f"are_tables_continuous returns {check_if_continuous} for pages {current_page - 1} and {current_page}")
+                    dfs.append(table_page)
+            else:
+                dfs.append(table_page)
+                
+            current_page = current_page + 1
+        
+        """
         table_page1 = self.extract_table_from_page(page)
         table_page2 = self.extract_table_from_page(page + 1)
 
@@ -594,15 +950,13 @@ class PdfTableReader:
             table_continuous = self.are_tables_continuous(table_page1, table_page2)
             print(f"are_tables_continuous returns {table_continuous} for pages {page} and {page+1}")
 
-        pages.append(page)
         dfs.append(table_page1)
 
         # If both text and table structure indicate continuity, merge tables
         if table_continuous is True:
             # Merge tables (exclude headers from the second table)
-            pages.append(page + 1)
             dfs.append(table_page2)
-
+        """
         return dfs
 
     def get_table_as_df(self, page, statement_type):
@@ -622,20 +976,50 @@ class PdfTableReader:
             if( content_page is not None):
                 return self.get_table_as_df(int(content_page) + self.page_offset, statement_type)
 
-    def scan_page_for_content(self, page_number, search_text, number_of_pages_to_scan):
+    def scan_page_for_content(self, page_number, search_text, number_of_pages_to_scan, ignore_spaces=False):
         scan_page = page_number
         max_pages_to_scan = page_number + number_of_pages_to_scan
         if(self.get_total_pages() < max_pages_to_scan + 1):
             max_pages_to_scan = self.get_total_pages() - 1
             
         while scan_page < max_pages_to_scan:
-            isFound = self.check_page_for_data(scan_page, search_text)
+            isFound = self.check_page_for_data(scan_page, search_text, ignore_spaces)
             if isFound is True:
                 return scan_page
             
             scan_page = scan_page + 1  
         
         return 0
+    
+    def scan_page_for_statement_table(self, page_number, list_text, number_of_pages_to_scan):
+        scan_page = page_number
+        max_pages_to_scan = page_number + number_of_pages_to_scan
+        if(self.get_total_pages() < max_pages_to_scan + 1):
+            max_pages_to_scan = self.get_total_pages() - 1
+            
+        output_text_path = os.path.join(self.temp_path, f"{self.filename}-gs.txt")
+
+        while scan_page < max_pages_to_scan:
+            page_text = PdfUtils.pdf_to_text_with_ghostscript(self.pdf_filepath, output_text_path, scan_page, scan_page)
+
+            if self.search_with_statement_pattern(page_text, list_text[0]) is True:                    
+                # Check if every item in list_text is in page_text, ignoring case
+                bFound = all(text.lower() in page_text.lower() for text in list_text[1:])
+                if bFound is True:
+                    return scan_page     
+                else:
+                    # see if subsequent page has data
+                    scan_page += 1
+                    page_text = PdfUtils.pdf_to_text_with_ghostscript(self.pdf_filepath, output_text_path, scan_page, scan_page)
+                    bFound = all(text.lower() in page_text.lower() for text in list_text[1:])
+                    if bFound is True:
+                        return scan_page
+                    
+                    continue
+            
+            scan_page = scan_page + 1  
+        
+        return scan_page
 
     def find_statement_from_subtable(self, page_number, statement):  
         tables = camelot.read_pdf(self.pdf_filepath, pages=str(page_number), flavor='stream')
@@ -675,7 +1059,36 @@ class PdfTableReader:
     
     def get_item8_statement(self, statement):
         # usage
-        item = "Item 8"
+        item = "8"
+        statement_type = "Financial Statements and Supplementary Data"
+
+        #page_offset_result = self.get_page_offset()
+        #print(page_offset_result)
+        
+        # Step: Find the page with Part I, Part II, Part III, and Item 8, and return the table as a DataFrame
+        #extracted_tables, nested = self.find_item_x_with_parts(item, statement_type, statement)
+        
+        statement_page = self.find_page_for_item_x_with_parts(item, statement_type, statement)
+        if(statement_page > 0):
+            list_text = []
+            list_text.append(statement)
+            list_text.append('Operating')
+            list_text.append('Net')
+
+            try:
+                scanned_page = self.scan_page_for_statement_table(statement_page, list_text, 100)   
+                if scanned_page > 0:
+                    dfs = self.get_table_as_df(int(scanned_page), statement)
+                        
+                    return dfs
+            except Exception as e:
+                print(e)
+        
+        return None
+
+    def get_item8_statement_bak(self, statement):
+        # usage
+        item = "8"
         statement_type = "Financial Statements and Supplementary Data"
 
         #page_offset_result = self.get_page_offset()
@@ -1588,12 +2001,21 @@ def main(args=None):
         #args = argparse.Namespace(file="Maravai.pdf", input_dir="./in", output_dir="./out", type="10-K")
         
         args_list = [
+            ["-f", "newell.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "unfi.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+
+"""
+            ["-f", "Dana.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+
+            ["-f", "Maravai.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "att.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+            ["-f", "CCC.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "GrafTech.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "GlobalNetLease.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "KraftHeinz.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "BellRing.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
-            ["-f", "Maravai.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "PostHoldings.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
+"""
         ]
         
         for arg in args_list:
@@ -1623,6 +2045,7 @@ def main(args=None):
 if __name__ == "__main__":
     main()
     print("Done with main")
+    
 # In[]
 dfs = []
 
@@ -1633,6 +2056,11 @@ expected_rows['BellRing.pdf'] = 34
 expected_rows['Maravai.pdf'] = 58
 expected_rows['PostHoldings.pdf'] = 59
 expected_rows['GrafTech.pdf'] = 48
+expected_rows['CCC.pdf'] = 71
+expected_rows['att.pdf'] = 53
+expected_rows['Dana.pdf'] = 52
+expected_rows['newell.pdf'] = 52
+expected_rows['unfi.pdf'] = 52
 
 
 for key, value in output_files.items():
@@ -1646,8 +2074,12 @@ for key, value in output_files.items():
     
     df = pd.read_csv(value)
     dfs.append(df)
-    if(df.shape[0] != expected_rows[key]):
-        print(f"{key}: MISMATCH!!!: The number of rows in dataframe {df.shape[0]} vs expected {expected_rows[key]}")
+    try:
+        if(df.shape[0] != expected_rows[key]):
+            print(f"{key}: MISMATCH!!!: The number of rows in dataframe {df.shape[0]} vs expected {expected_rows[key]}")
+    except Exception as e:
+        # Handle specific exception
+        print(f"error occurred: {e}")
     #PdfUtils.print_df(df)
 
 # In[]
