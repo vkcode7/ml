@@ -674,6 +674,11 @@ class PdfTableReader:
                         table_found, statement_page = self.get_page_from_the_FINANCIAL_STATEMENTS_AND_SUPPLEMENTARY_DATA_Table(
                             scanned_page, substatement)
                         if table_found is True:
+                            # There may be cases where we found the index table of statements but somehow
+                            # can not get the page number from the table (example is Disney 10K)
+                            # in that case just return the scanned_page
+                            if statement_page == 0:
+                                return scanned_page
                             return statement_page
                         
                     # We are here means that sub-table is not found and instead we just ran into the statement by search
@@ -2001,6 +2006,7 @@ def main(args=None):
         #args = argparse.Namespace(file="Maravai.pdf", input_dir="./in", output_dir="./out", type="10-K")
         
         args_list = [
+            ["-f", "disney.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "newell.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
             ["-f", "unfi.pdf", "-i", "./in", "-o", "./out", "-t", "10-K"],
 
