@@ -119,4 +119,43 @@ It’s important to note that completions are predictions, based on probabilitie
 not guaranteed to be correct. This probabilistic nature of language models makes
 them both so exciting and frustrating to use.
 
+### Self-Supervision
+Language modeling is just one of many ML algorithms. There are also models for
+object detection, topic modeling, recommender systems, weather forecasting, stock
+price prediction, etc. What’s special about language models that made them the center
+of the scaling approach that caused the ChatGPT moment?
+The answer is that language models can be trained using self-supervision, while many
+other models require supervision. Supervision refers to the process of training ML
+algorithms using labeled data.
 
+Self-supervision helps overcome the data labeling bottleneck. In self-supervision,
+instead of requiring explicit labels, the model can infer labels from the input data.
+Language modeling is self-supervised because each input sequence provides both the
+labels (tokens to be predicted) and the contexts the model can use to predict these
+labels.
+
+Self-supervised learning means that language models can learn from text sequences
+without requiring any labeling. Because text sequences are everywhere—in books,
+blog posts, articles, and Reddit comments—it’s possible to construct a massive
+amount of training data, allowing language models to scale up to become LLMs.
+
+A model’s size is typically measured by its number of parameters. A parameter is a variable
+within an ML model that is updated through the training process.7 In general,
+though this is not always true, the more parameters a model has, the greater its
+capacity to learn desired behaviors.
+
+### From Large Language Models to Foundation Models
+While many people still call Gemini and GPT-4V LLMs, they’re better characterized
+as foundation models. The word foundation signifies both the importance of these
+models in AI applications and the fact that they can be built upon for different needs.
+
+A model that can work with more than one data modality is also called a multimodal
+model. A generative multimodal model is also called a large multimodal model
+(LMM).
+
+### Prompt Engineering / RAG/ Finetune
+Using a database to supplement the instructions is called retrievalaugmented
+generation (RAG). You can also finetune—further train—the model on a
+dataset of high-quality product descriptions.
+Prompt engineering, RAG, and finetuning are three very common AI engineering
+techniques that you can use to adapt a model to your needs.
