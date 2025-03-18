@@ -1,32 +1,33 @@
 # ml
-ML projects
+### ML projects
 
-How to create a virtual env in python?
+#### How to create a virtual env in python?
 To use venv in your project, in your terminal, create a new project folder, cd to the project folder in your terminal, and run the following command:
-
+```bash
 python<version> -m venv virtual-environment-name
   
- mkdir projectA
+mkdir projectA
   
- cd projectA
+cd projectA
   
- python3.8 -m venv env
-  
+python3.8 -m venv env
+ ```
+
 When you check the new projectA folder, you will notice that a new folder called env has been created. env is the name of our virtual environment, but it can be named anything you want.
-  
+<br>
 Activate it using:
-source env/bin/activate
+```bash
+source env/bin/activate OR conda activate myvenv
   
 deactivate:
 deactivate
-
+```
 important commands:
+```bash
   pip freeze > requirements.txt
   ~ pip install -r requirements.txt
-
-To use this virtual env in Spyder:
-  
-Preferences -> Python Interpreter
+```
+To use this virtual env in Spyder: Preferences -> Python Interpreter
 
 https://stackoverflow.com/questions/30170468/how-to-run-spyder-in-virtual-environment
   
