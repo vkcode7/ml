@@ -159,3 +159,45 @@ generation (RAG). You can also finetune—further train—the model on a
 dataset of high-quality product descriptions.
 Prompt engineering, RAG, and finetuning are three very common AI engineering
 techniques that you can use to adapt a model to your needs.
+
+
+### On the Differences Among Training, Pre-Training, Finetuning, and Post-Training
+
+Training always involves changing model weights, but not all changes to model
+weights constitute training. For example, quantization, the process of reducing the
+precision of model weights, technically changes the model’s weight values but isn’t
+considered training.
+
+The term training can often be used in place of pre-training, finetuning, and posttraining,
+which refer to different training phases:
+
+#### Pre-training
+Pre-training refers to training a model from scratch—the model weights are randomly
+initialized. For LLMs, pre-training often involves training a model for text
+completion. Out of all training steps, pre-training is often the most resourceintensive
+by a long shot. For the InstructGPT model, pre-training takes up to
+98% of the overall compute and data resources. Pre-training also takes a long
+time to do. A small mistake during pre-training can incur a significant financial
+loss and set back the project significantly. Due to the resource-intensive nature of
+pre-training, this has become an art that only a few practice. Those with expertise
+in pre-training large models, however, are heavily sought after.
+
+#### Finetuning
+Finetuning means continuing to train a previously trained model—the model
+weights are obtained from the previous training process. Because the model
+already has certain knowledge from pre-training, finetuning typically requires
+fewer resources (e.g., data and compute) than pre-training.
+
+#### Post-training
+Many people use post-training to refer to the process of training a model after the
+pre-training phase. Conceptually, post-training and finetuning are the same and
+can be used interchangeably. However, sometimes, people might use them differently
+to signify the different goals. It’s usually post-training when it’s done by
+model developers. For example, OpenAI might post-train a model to make it
+better at following instructions before releasing it. It’s finetuning when it’s done
+by application developers. For example, you might finetune an OpenAI model
+(which might have been post-trained itself) to adapt it to your needs.
+
+### Inference optimization. 
+Inference optimization means making models faster and
+cheaper.
