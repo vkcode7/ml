@@ -42,6 +42,10 @@ Learn next-generation NLP with transformers for sentiment analysis, Q&A, similar
 this video go through how to use LangChain without Open AI for retrieval QA - Flan-T5, FastChat-T5, StableVicuna, WizardLM
 https://www.youtube.com/watch?v=9ISVjh8mdlA
 
+
+# Chip Huyen: AI Engineering
+## Ch 1: Introduction
+
 ### Adapting LLMs
 
 This list highlights various techniques that you can use to tailor the LLM to meet your specific needs:
@@ -201,3 +205,66 @@ by application developers. For example, you might finetune an OpenAI model
 ### Inference optimization. 
 Inference optimization means making models faster and
 cheaper.
+
+### Prompt engineering and context construction.
+Prompt engineering is about getting AI
+models to express the desirable behaviors from the input alone, without changing the
+model weights.
+
+It’s possible to get a model to do amazing things with just prompts. The right instructions
+can get a model to perform the task you want, in the format of your choice.
+Prompt engineering is not just about telling a model what to do. It’s also about giving
+the model the necessary context and tools to do a given task. For complex tasks with
+long context, you might also need to provide the model with a memory management
+system so that the model can keep track of its history.
+
+### Language Support
+Before foundation models, the most
+popular ML frameworks supported mostly Python APIs. Today, Python is still popular but there is also increasing support for JavaScript APIs, with LangChain.js,
+Transformers.js, OpenAI’s Node library, and Vercel’s AI SDK.
+
+## Ch 2: Understanding Fpundation Models
+
+### Training Data
+An AI model is only as good as the data it was trained on.
+
+A common source for training data is Common Crawl, created by a
+nonprofit organization that sporadically crawls websites on the internet. In 2022 and
+2023, this organization crawled approximately 2–3 billion web pages each month.
+Google provides a clean subset
+
+The data quality of Common Crawl, and C4 to a certain extent, is questionable—
+think clickbait, misinformation, propaganda, conspiracy theories, racism, misogyny,
+and every sketchy website you’ve ever seen or avoided on the internet.
+
+### Multilingual Models
+- English accounts for almost half of the data (45.88%), making it eight times more
+prevalent than the second-most common language, Russian (5.97%)
+- Given the dominance of English in the internet data, it’s not surprising that generalpurpose
+models work much better for English than other languages
+- Similarly, when tested on six math problems on Project Euler, Yennie Jun found that
+GPT-4 was able to solve problems in English more than three times as often compared
+to Armenian or Farsi.
+- Given that LLMs are generally good at translation, can we just translate all queries
+from other languages into English, obtain the responses, and translate them back into
+the original language? Many people indeed follow this approach, but it’s not ideal.
+First, this requires a model that can sufficiently understand under-represented languages
+to translate. Second, translation can cause information loss. For example,
+some languages, like Vietnamese, have pronouns to denote the relationship between
+the two speakers. When translating into English, all these pronouns are translated
+into I and you, causing the loss of the relationship information.
+- Other than quality issues, models can also be slower and more expensive for non-
+English languages.
+- To convey the same meaning, languages like Burmese and Hindi require a lot
+more tokens than English or Spanish. For the MASSIVE dataset, the median token
+length in English is 7, but the median length in Hindi is 32, and in Burmese, it’s a
+whopping 72, which is ten times longer than in English.
+
+### Model Architecture
+As of this writing, the most dominant architecture for language-based foundation
+models is the transformer architecture (Vaswani et al., 2017), which is based on the
+attention mechanism.
+
+#### Transformer architecture
+The transformer architecture was popularized on the heels of the success of the seq2seq
+(sequence-to-sequence) architecture.
