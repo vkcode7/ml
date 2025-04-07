@@ -488,4 +488,54 @@ you explain the pros and cons of a vaccine, you don’t want AI to be pseudo-sci
 
 ## Chapter 3: Evaluation Methodology
 
+As teams rush to adopt AI, many quickly realize that the biggest hurdle to bringing
+AI applications to reality is evaluation. For some applications, figuring out evaluation
+can take up the majority of the development effort
 
+#### Understanding Language Modeling Metrics
+Most autoregressive language models are trained using
+cross entropy or its relative, perplexity. When reading papers and model reports, you
+might also come across bits-per-character (BPC) and bits-per-byte (BPB); both are
+variations of cross entropy.
+
+All four metrics—cross entropy, perplexity, BPC, and BPB—are closely related. If you
+know the value of one, you can compute the other three, given the necessary information.
+
+##### Entropy
+Entropy measures how much information, on average, a token carries. The higher the
+entropy, the more information each token carries, and the more bits are needed to
+represent a token.
+
+Intuitively, entropy measures how difficult it is to predict what comes next in a language.
+The lower a language’s entropy (the less information a token of a language
+carries), the more predictable that language. In
+
+##### Cross Entropy
+When you train a language model on a dataset, your goal is to get the model to learn
+the distribution of this training data. In other words, your goal is to get the model to
+predict what comes next in the training data. A language model’s cross entropy on a
+dataset measures how difficult it is for the language model to predict what comes
+next in this dataset.
+
+##### Bits-per-Character and Bits-per-Byte
+One unit of entropy and cross entropy is bits. If the cross entropy of a language
+model is 6 bits, this language model needs 6 bits to represent each token.
+Since different models have different tokenization methods—for example, one model
+uses words as tokens and another uses characters as tokens—the number of bits per
+token isn’t comparable across models. Some use the number of bits-per-character
+(BPC) instead. If the number of bits per token is 6 and on average, each token consists
+of 2 characters, the BPC is 6/2 = 3.
+
+##### Perplexity
+Perplexity is the exponential of entropy and cross entropy. Perplexity is often shortened
+to PPL. Given a dataset with the true distribution P, its perplexity is defined as:
+PPL (P) = 2^(H (P))
+
+If cross entropy measures how difficult it is for a model to predict the next token,
+perplexity measures the amount of uncertainty it has when predicting the next token.
+Higher uncertainty means there are more possible options for the next token.
+
+##### Perplexity Interpretation and Use Cases
+As discussed, cross entropy, perplexity, BPC, and BPB are variations of language
+models’ predictive accuracy measurements. The more accurately a model can predict
+a text, the lower these metrics are. (p-122(
