@@ -268,3 +268,224 @@ attention mechanism.
 #### Transformer architecture
 The transformer architecture was popularized on the heels of the success of the seq2seq
 (sequence-to-sequence) architecture.
+
+The transformer architecture dispenses with RNNs entirely. With transformers, the
+input tokens can be processed in parallel, significantly speeding up input processing.
+While the transformer removes the sequential input bottleneck, transformer-based
+autoregressive language models still have the sequential output bottleneck.
+
+#### Attention mechanism.
+At the heart of the transformer architecture is the attention
+mechanism. Understanding this mechanism is necessary to understand how transformer
+models work. Under the hood, the attention mechanism leverages key, value,
+and query vectors:
+- The query vector (Q) represents the current state of the decoder at each decoding
+step. Using the same book summary example, this query vector can be thought of
+as the person looking for information to create a summary.
+- Each key vector (K) represents a previous token. If each previous token is a page
+in the book, each key vector is like the page number. Note that at a given decoding
+step, previous tokens include both input tokens and previously generated
+tokens.
+- Each value vector (V) represents the actual value of a previous token, as learned
+by the model. Each value vector is like the page’s content.
+
+#### Other model architectures
+While the transformer model dominates the landscape, it’s not the only architecture.
+Since AlexNet revived the interest in deep learning in 2012, many architectures have
+gone in and out of fashion. Seq2seq was in the limelight for four years (2014–2018).
+GANs (generative adversarial networks) captured the collective imagination a bit
+longer (2014–2019). Compared to architectures that came before it, the transformer
+is sticky. It’s been around since 2017.10 How long until something better comes
+along?
+
+### Model Size
+The number of parameters is usually appended at the end of a model name. For
+example, Llama-13B refers to the version of Llama, a model family developed by
+Meta, with 13 billion parameters.
+
+In general, increasing a model’s parameters increases its capacity to learn, resulting in
+better models. Given two models of the same model family, the one with 13 billion
+parameters is likely to perform much better than the one with 7 billion parameters.
+
+The number of parameters helps us estimate the compute resources needed to train
+and run this model. For example, if a model has 7 billion parameters, and each
+parameter is stored using 2 bytes (16 bits), then we can calculate that the GPU memory
+needed to do inference using this model will be at least 14 billion bytes (14 GB).
+
+The number of parameters can be misleading if the model is sparse. A sparse model
+has a large percentage of zero-value parameters. A 7B-parameter model that is 90%
+sparse only has 700 million non-zero parameters. Sparsity allows for more efficient
+data storage and computation. This means that a large sparse model can require less
+compute than a small dense model.
+
+A type of sparse model that has gained popularity in recent years is mixture-ofexperts
+(MoE) (Shazeer et al., 2017). An MoE model is divided into different groups
+of parameters, and each group is an expert. Only a subset of the experts is active for
+(used to) process each token.
+
+For example, Mixtral 8x7B is a mixture of eight experts, each expert with seven billion
+parameters. If no two experts share any parameter, it should have 8 × 7 billion =
+56 billion parameters. However, due to some parameters being shared, it has only
+46.7 billion parameters.
+
+The number of tokens in a model’s dataset isn’t the same as its number of training
+tokens. The number of training tokens measures the tokens that the model is trained
+on. If a dataset contains 1 trillion tokens and a model is trained on that dataset for
+two epochs—an epoch is a pass through the dataset—the number of training tokens is
+2 trillion.
+
+A more standardized unit for a model’s compute requirement is FLOP, or floating
+point operation. FLOP measures the number of floating point operations performed
+for a certain task. Google’s largest PaLM-2 model, for example, was trained using 10^22
+FLOPs. GPT-3-175B was trained using 3.14 × 10^23 FLOPs,
+
+An NVIDIA H100
+NVL GPU can deliver a maximum of 60 TeraFLOP/s: 6 × 10^13 FLOPs a second or
+5.2 × 10^18 FLOPs a day.
+
+Assume that you have 256 H100s. If you can use them at their maximum capacity
+and make no training mistakes, it’d take you (3.14 × 10^23) / (256 × 5.2 × 10^18)
+= ~236 days, or approximately 7.8 months, to train GPT-3-175B. 
+
+At 70% utilization and $2/h for one H100, training GPT-3-175B would cost over $4
+million:
+$2/H100/hour × 256 H100 × 24 hours × 256 days / 0.7 = $4,142,811.43
+
+In summary, three numbers signal a model’s scale:
+- Number of parameters, which is a proxy for the model’s learning
+capacity.
+- Number of tokens a model was trained on, which is a proxy
+for how much a model learned.
+- Number of FLOPs, which is a proxy for the training cost.
+
+### Parameter Versus Hyperparameter
+A parameter can be learned by the model during the training process. A hyperparameter
+is set by users to configure the model and control how the model learns.
+Hyperparameters to configure the model include the number of layers, the model
+dimension, and vocabulary size. Hyperparameters to control how a model learns
+include batch size, number of epochs, learning rate, per-layer initial variance, and
+more.
+
+### Post-Training
+Post-training starts with a pre-trained model. Let’s say that you’ve pre-trained a
+foundation model using self-supervision.
+
+Every model’s post-training is different. However, in general, post-training consists
+of two steps:
+
+1. Supervised finetuning (SFT): Finetune the pre-trained model on high-quality
+instruction data to optimize models for conversations instead of completion.
+
+3. Preference finetuning: Further finetune the model to output responses that align
+with human preference.
+
+For language-based foundation models, pre-training optimizes token-level quality,
+where the model is trained to predict the next token accurately. However, users don’t
+care about token-level quality—they care about the quality of the entire response.
+Post-training, in general, optimizes the model to generate responses that users prefer.
+Some people compare pre-training to reading to acquire knowledge, while posttraining
+is like learning how to use that knowledge.
+
+As post-training consumes a small portion of resources compared to pre-training
+(InstructGPT used only 2% of compute for post-training and 98% for pre-training),
+you can think of post-training as unlocking the capabilities that the pre-trained
+model already has but are hard for users to access via prompting alone.
+
+1. Self-supervised pre-training results in a rogue model that can be considered an
+untamed monster because it uses indiscriminate data from the internet.<br>
+2. This monster is then supervised finetuned on higher-quality data—Stack Overflow,
+Quora, or human annotations—which makes it more socially acceptable.<br>
+3. This finetuned model is further polished using preference finetuning to make it
+customer-appropriate, which is like giving it a smiley face.<br>
+
+### Preference Finetuning
+With great power comes great responsibilities. A model that can assist users in
+achieving great things can also assist users in achieving terrible things. Demonstration
+data teaches the model to have a conversation but doesn’t teach the model what
+kind of conversations it should have. For example, if a user asks the model to write an
+essay about why one race is inferior or how to hijack a plane, should the model
+comply?
+
+The earliest successful preference finetuning algorithm, which is still popular today, is RLHF.
+RLHF consists of two parts:<br>
+1. Train a reward model that scores the foundation model’s outputs.<br>
+2. Optimize the foundation model to generate responses for which the reward
+model will give maximal scores.<br>
+
+### Sampling
+A model constructs its outputs through a process known as sampling. This section
+discusses different sampling strategies and sampling variables, including temperature,
+top-k, and top-p.
+
+The right sampling strategy can make a model generate responses more suitable for
+your application. For example, one sampling strategy can make the model generate
+more creative responses, whereas another strategy can make its generations more
+predictable.
+
+#### Temperature
+To redistribute the probabilities of the possible values, you can sample with a temperature.
+Intuitively, a higher temperature reduces the probabilities of common tokens,
+and as a result, increases the probabilities of rarer tokens. This enables models to create
+more creative responses.
+
+The higher the temperature, the less likely it is that the model is going to pick the
+most obvious value.
+
+#### Top-k
+Top-k is a sampling strategy to reduce the computation workload without sacrificing
+too much of the model’s response diversity.
+
+A smaller k value makes the text more predictable but less interesting, as the model is
+limited to a smaller set of likely words.
+
+#### Top-p
+In top-k sampling, the number of values considered is fixed to k. However, this number
+should change depending on the situation. For example, given the prompt “Do
+you like music? Answer with only yes or no.” the number of values considered should
+be two: yes and no. Given the prompt “What’s the meaning of life?” the number of
+values considered should be much larger.
+
+#### min-p
+A related sampling strategy is min-p, where you set the minimum probability that a
+token must reach to be considered during sampling.
+
+#### Stopping condition
+An autoregressive language model generates sequences of tokens by generating one
+token after another. A long output sequence takes more time, costs more compute
+(money),28 and can sometimes annoy users. We might want to set a condition for the
+model to stop the sequence. One easy method is to ask models to stop generating after a fixed number of tokens.
+
+#### The Probabilistic Nature of AI
+The way AI models sample their responses makes them probabilistic.
+
+If an AI model thinks that
+Vietnamese cuisine has a 70% chance of being the best cuisine in the world and Italian
+cuisine has a 30% chance, it’ll answer “Vietnamese cuisine” 70% of the time and
+“Italian cuisine” 30% of the time. The opposite of probabilistic is deterministic, when
+the outcome can be determined without any random variation.
+This probabilistic nature can cause inconsistency and hallucinations. Inconsistency is
+when a model generates very different responses for the same or slightly different
+prompts. Hallucination is when a model gives a response that isn’t grounded in facts.
+
+This probabilistic nature makes AI great for creative tasks. What is creativity but the
+ability to explore beyond the common paths—to think outside the box? AI is a great
+sidekick for creative professionals. It can brainstorm limitless ideas and generate
+never-before-seen designs. However, this same probabilistic nature can be a pain for
+everything else.
+
+#### Inconsistency
+Model inconsistency manifests in two scenarios:
+
+1. Same input, different outputs: Giving the model the same prompt twice leads to
+two very different responses.<br>
+2. Slightly different input, drastically different outputs: Giving the model a slightly
+different prompt, such as accidentally capitalizing a letter, can lead to a very different
+output.<br>
+
+#### Hallucination
+Hallucinations are fatal for tasks that depend on factuality. If you’re asking AI to help
+you explain the pros and cons of a vaccine, you don’t want AI to be pseudo-scientific.
+
+## Chapter 3: Evaluation Methodology
+
+
