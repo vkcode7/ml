@@ -603,14 +603,30 @@ BERT, CLIP (Contrastive Language–Image Pre-training), and Sentence Transformer
 
 **Embedding sizes used by common models**<br>
 Model               Embedding     size<br>
-Google’s BERT       BERT base:     768<br>
+Google’s BERT =>      BERT base:     768<br>
                     BERT large:   1024<br>
-OpenAI’s CLIP       Image:         512<br>
+OpenAI’s CLIP =>      Image:         512<br>
                     Text:          512<br>
-OpenAI Embeddings API text-embedding-3-small: 1536<br>
+OpenAI Embeddings API => text-embedding-3-small: 1536<br>
                       text-embedding-3-large: 3072<br>
-Cohere’s Embed v3   embed-english-v3.0: 1024<br>
+Cohere’s Embed v3 => embed-english-v3.0: 1024<br>
                     embed-english-light-3.0: 384<br>
+<br>
+Because models typically require their inputs to first be transformed into vector representations,
+many ML models, including GPTs and Llamas, also involve a step to
+generate embeddings.
+
+At a high level, an embedding algorithm is considered good if more-similar texts
+have closer embeddings, measured by cosine similarity or related metrics.
+
+A joint embedding space that can represent data of different modalities is a multimodal
+embedding space. In a text–image joint embedding space, the embedding of an
+image of a man fishing should be closer to the embedding of the text “a fisherman”
+than the embedding of the text “fashion show”. This joint embedding space allows
+embeddings of different modalities to be compared and combined. For example, this
+enables text-based image search. Given a text, it helps you find images closest to this
+text.
+p136
 
 
 
