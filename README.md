@@ -690,4 +690,124 @@ effort. You’ll need to optimize the model, scale and maintain the inference se
 needed, and provide guardrails around your model. APIs are expensive, but engineering
 can be even more so.
 
-## Chapter 5: Prompt Engineering p211
+## Chapter 5: Prompt Engineering
+A prompt generally consists of one or more of the following parts:
+- Task description: What you want the model to do, including the role you want the model to play
+and the output format.
+- Example(s) of how to do this task: For example, if you want the model to detect toxicity in text, you might provide a
+few examples of what toxicity and non-toxicity look like.
+- The task: The concrete task you want the model to do, such as the question to answer or
+the book to summarize.
+
+### In-Context Learning: Zero-Shot and Few-Shot
+Teaching models what to do via prompts is also known as in-context learning.
+
+
+In-context learning allows a model to incorporate new information continually to
+make decisions, preventing it from becoming outdated.
+
+
+Each example provided in the prompt is called a shot. Teaching a model to learn from
+examples in the prompt is also called few-shot learning. With five examples, it’s 5-
+shot learning. When no example is provided, it’s zero-shot learning.
+
+
+The number of examples is limited by the model’s maximum context length. The
+more examples there are, the longer your prompt will be, increasing the inference
+cost.
+
+
+### System Prompt and User Prompt
+Many model APIs give you the option to split a prompt into a system prompt and a
+user prompt. You can think of the system prompt as the task description and the user
+prompt as the task. Let’s go through an example to see what this looks like.
+
+
+Imagine you want to build a chatbot that helps buyers understand property disclosures.
+A user can upload a disclosure and ask questions such as “How old is the
+roof?” or “What is unusual about this property?” You want this chatbot to act like a
+real estate agent. You can put this roleplaying instruction in the system prompt, while
+the user question and the uploaded disclosure can be in the user prompt.
+
+
+**System prompt:** You’re an experienced real estate agent. Your job is to
+read each disclosure carefully, fairly assess the condition of the
+property based on this disclosure, and help your buyer understand the
+risks and opportunities of each property. For each question, answer
+succinctly and professionally.
+
+
+**User prompt:**
+Context: [disclosure.pdf]
+Question: Summarize the noise complaints, if any, about this property.
+Answer:
+
+
+Almost all generative AI applications, including ChatGPT, have system prompts.
+Typically, the instructions provided by application developers are put into the system
+prompt, while the instructions provided by users are put into the user prompt. But
+you can also be creative and move instructions around, such as putting everything
+into the system prompt or user prompt. You can experiment with different ways to
+structure your prompts to see which one works best.
+
+
+But why would system prompts boost performance compared to user prompts?
+Under the hood, the system prompt and the user prompt are concatenated into a single
+final prompt before being fed into the model. From the model’s perspective, system
+prompts and user prompts are processed the same way. Any performance boost that
+a system prompt can give is likely because of one or both of the following factors:
+- The system prompt comes first in the final prompt, and the model might just be
+better at processing instructions that come first.
+- he model might have been post-trained to pay more attention to the system
+prompt
+
+### Context Length and Context Efficiency
+How much information can be included in a prompt depends on the model’s context
+length limit.
+
+### Prompt Engineering Best Practices
+- Explain, without ambiguity, what you want the model to do
+- Ask the model to adopt a persona
+- Provide examples
+- Specify the output format
+- Provide Sufficient Context
+- Break Complex Tasks into Simpler Subtasks
+- Give the Model Time to Think
+  
+The process of gathering necessary context for a given query is called context
+construction. Context construction tools include data retrieval, such as in a RAG
+pipeline, and web search.
+
+### Organize and Version Prompts
+It’s good practice to separate prompts from code—you’ll see why in a moment. For
+example, you can put your prompts in a file prompts.py and reference these prompts
+when creating a model query. Here’s an example of what this might look like:
+```py
+#file: prompts.py
+GPT4o_ENTITY_EXTRACTION_PROMPT = [YOUR PROMPT]
+```
+```py
+#file: application.py
+from prompts import GPT4o_ENTITY_EXTRACTION_PROMPT
+def query_openai(model_name, user_prompt):
+  completion = client.chat.completions.create(
+  model=model_name,
+  messages=[
+    {"role": "system", "content": GPT4o_ENTITY_EXTRACTION_PROMPT},
+    {"role": "user", "content": user_prompt}
+  ]
+  )
+```
+
+Your prompt template might also contain other information about how the prompt
+should be used, such as the following:
+- The model endpoint URL
+- The ideal sampling parameters, like temperature or top-p
+- The input schema
+- The expected output schema (for structured outputs)
+
+Many public prompt
+marketplaces let users upvote their favorite prompts (see PromptHero and Cursor
+Directory). Some even let users sell and buy prompts (see PromptBase).
+
+## Chapter 6: RAG and Agents p253
