@@ -44,7 +44,7 @@ https://www.youtube.com/watch?v=9ISVjh8mdlA
 
 
 # Chip Huyen: AI Engineering
-## Ch 1: Introduction
+## Chapter 1: Introduction
 
 ### Adapting LLMs
 
@@ -223,7 +223,7 @@ Before foundation models, the most
 popular ML frameworks supported mostly Python APIs. Today, Python is still popular but there is also increasing support for JavaScript APIs, with LangChain.js,
 Transformers.js, OpenAI’s Node library, and Vercel’s AI SDK.
 
-## Ch 2: Understanding Fpundation Models
+## Chapter 2: Understanding Fpundation Models
 
 ### Training Data
 An AI model is only as good as the data it was trained on.
@@ -626,7 +626,68 @@ than the embedding of the text “fashion show”. This joint embedding space al
 embeddings of different modalities to be compared and combined. For example, this
 enables text-based image search. Given a text, it helps you find images closest to this
 text.
-p136
+
+## Chapter 4: Evaluate AI Systems
+In general, you can think of evaluation criteria in the following buckets:
+domain-specific capability, generation capability, instruction-following capability,
+and cost and latency.
+
+### Open source, open weight, and model licenses
+The term “open source model” has become contentious. Originally, open source was
+used to refer to any model that people can download and use.
 
 
+For many use cases,
+being able to download the model is sufficient. However, some people argue that
+since a model’s performance is largely a function of what data it was trained on,
+a model should be considered open only if its training data is also made publicly
+available.
 
+
+To signal whether the data is also open, the term “open weight” is used for models
+that don’t come with open data, whereas the term “open model” is used for models
+that come with open data.
+
+
+Vast majority of open source models are open weight only.
+Model developers might hide training data information on purpose, as this information
+can open model developers to public scrutiny and potential lawsuits.
+
+
+Some people use the term restricted weight to refer to open source models with
+restricted licenses.
+
+### Open source models versus model APIs
+The service
+that hosts the model and receives user queries, runs the model to generate responses
+for queries, and returns these responses to the users is called an **inference service**.
+
+The term
+model API is typically used to refer to the API of the inference service, but there are
+also APIs for other model services, such as finetuning APIs and evaluation APIs.
+
+
+After developing a model, a developer can choose to open source it, make it accessible
+via an API, or both. Many model developers are also model service providers.
+Cohere and Mistral open source some models and provide APIs for some. OpenAI is
+typically known for their commercial models, but they’ve also open sourced models
+(GPT-2, CLIP). Typically, model providers open source weaker models and keep
+their best models behind paywalls, either via APIs or to power their products.
+
+
+Since building scalable inference services for larger models is nontrivial, many companies
+don’t want to build them themselves. This has led to the creation of many
+third-party inference and finetuning services on top of open source models. Major
+cloud providers like AWS, Azure, and GCP all provide API access to popular open
+source models.
+
+### API cost versus engineering cost. 
+Model APIs charge per usage, which means that they
+can get prohibitively expensive with heavy usage. At a certain scale, a company that is
+bleeding its resources using APIs might consider hosting their own models.18
+However, hosting a model yourself requires nontrivial time, talent, and engineering
+effort. You’ll need to optimize the model, scale and maintain the inference service as
+needed, and provide guardrails around your model. APIs are expensive, but engineering
+can be even more so.
+
+## Chapter 5: Prompt Engineering p211
