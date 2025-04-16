@@ -44,6 +44,8 @@ https://www.youtube.com/watch?v=9ISVjh8mdlA
 
 
 # Chip Huyen: AI Engineering
+https://github.com/chiphuyen/aie-book?tab=readme-ov-file
+
 ## Chapter 1: Introduction
 
 ### Adapting LLMs
@@ -811,3 +813,69 @@ marketplaces let users upvote their favorite prompts (see PromptHero and Cursor
 Directory). Some even let users sell and buy prompts (see PromptBase).
 
 ## Chapter 6: RAG and Agents p253
+For a given application, the model’s
+instructions (PROMPT) are common to all queries, whereas context is specific to each query. 
+
+Two dominating patterns for context construction are RAG, or retrieval-augmented
+generation, and agents. The RAG pattern allows the model to retrieve relevant information
+from external data sources. The agentic pattern allows the model to use tools
+such as web search and news APIs to gather information.
+
+Both RAG and agentic patterns are exciting because of the capabilities they bring to
+already powerful models.
+
+### RAG -> retrieval-augmented generation
+RAG is a technique that enhances a model’s generation by retrieving the relevant
+information from external memory sources. An external memory source can be an
+internal database, a user’s previous chat sessions, or the internet.
+
+With RAG, only the information most relevant
+to the query, as determined by the retriever, is retrieved and input into the model.
+
+You can think of RAG as a technique to construct context specific to each query,
+instead of using the same context for all queries.
+
+Context construction for foundation models is equivalent to feature engineering for
+classical ML models. They serve the same purpose: giving the model the necessary
+information to process an input.
+
+RAG allows a model to use only the most relevant information for each
+query, reducing the number of input tokens while potentially increasing the model’s
+performance.
+
+Anthropic suggested that for Claude models, if “your knowledge
+base is smaller than 200,000 tokens (about 500 pages of material),
+you can just include the entire knowledge base in the prompt that
+you give the model, with no need for RAG or similar methods”
+(Anthropic, 2024).
+
+#### Term-based retrieval
+Given a query, the most straightforward way to find relevant documents is with keywords.
+Some people call this approach lexical retrieval. For example, given the query
+“AI engineering”, the model will retrieve all the documents that contain “AI engineering”.
+
+The number of times a term appears in a document is called
+**term frequency (TF)**.
+
+**IDF: inverse document frequency**
+(IDF). To compute IDF for a term, count all the documents that contain this
+term, then divide the total number of documents by this count. If there are 10
+documents and 5 of them contain a given term, then the IDF of this term is 10 / 5
+= 2. The higher a term’s IDF, the more important it is.
+
+TF-IDF is an algorithm that combines these two metrics: term frequency (TF) and
+inverse document frequency (IDF).
+
+Additionally, you might want to convert all characters to lowercase, remove punctuation,
+and eliminate stop words (like “the”, “and”, “is”, etc.). Term-based retrieval solutions
+often handle these automatically. Classical NLP packages, such as NLTK
+(Natural Language Toolkit), spaCy, and Stanford’s CoreNLP, also offer tokenization
+functionalities.
+
+#### Embedding-based retrieval
+Term-based retrieval computes relevance at a lexical level rather than a semantic
+level. For
+example, querying “transformer architecture” might return documents about the
+electric device or the movie Transformers. On the other hand, embedding-based
+retrievers aim to rank documents based on how closely their meanings align with the
+query. This approach is also known as semantic retrieval.
