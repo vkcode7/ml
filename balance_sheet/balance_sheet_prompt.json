@@ -1,0 +1,275 @@
+{
+  "system_prompt": "You are a financial analyst expert specializing in balance sheet standardization. Your task is to map company-specific balance sheet line items to standardized categories. Analyze each line item and return the most appropriate standardized category name. If a line item doesn't clearly belong to any of the provided categories, return 'OTHER'.",
+  
+  "standardized_categories": {
+    "CASH_AND_CASH_EQUIVALENTS": {
+      "description": "Highly liquid assets that can be readily converted to cash within 90 days or less",
+      "includes": ["Cash on hand", "Bank deposits", "Money market funds", "Commercial paper", "Treasury bills", "Certificates of deposit (short-term)", "Cash equivalents"],
+      "common_variations": ["Cash and short-term deposits", "Cash and bank balances", "Cash at bank and in hand", "Liquid funds", "Cash and cash equivalents", "Cash and short-term investments (if <90 days)"],
+      "excludes": ["Restricted cash (long-term)", "Investments with maturity >90 days"]
+    },
+    "SHORT_TERM_INVESTMENTS": {
+      "description": "Marketable securities and investments with maturities between 90 days and 1 year",
+      "includes": ["Marketable securities", "Short-term bonds", "Short-term government securities", "Time deposits >90 days", "Investment funds", "Trading securities"],
+      "common_variations": ["Short-term marketable securities", "Temporary investments", "Short-term financial assets", "Current investments", "Marketable debt securities"],
+      "excludes": ["Cash equivalents (<90 days)", "Long-term investments", "Equity method investments"]
+    },
+    "ACCOUNTS_RECEIVABLE": {
+      "description": "Amounts owed by customers for goods sold or services provided on credit",
+      "includes": ["Trade receivables", "Customer receivables", "Accounts receivable (net of allowances)", "Bills receivable", "Notes receivable (short-term)"],
+      "common_variations": ["Trade receivables, net", "Accounts receivable, less allowance", "Customer accounts", "Trade debtors", "Receivables from customers", "Net receivables"],
+      "excludes": ["Employee advances", "Tax refunds receivable", "Insurance claims", "Related party receivables (non-trade)"]
+    },
+    "INVENTORY": {
+      "description": "Goods held for sale, work in progress, and raw materials used in production",
+      "includes": ["Raw materials", "Work in progress", "Finished goods", "Merchandise inventory", "Supplies inventory", "Spare parts inventory"],
+      "common_variations": ["Inventories", "Stock", "Raw materials and supplies", "Finished products", "Goods for resale", "Work in process", "Materials and supplies"],
+      "excludes": ["Long-term spare parts", "Investment property", "Assets held for sale"]
+    },
+    "PREPAID_EXPENSES": {
+      "description": "Payments made in advance for goods or services to be received within one year",
+      "includes": ["Prepaid insurance", "Prepaid rent", "Prepaid utilities", "Advance payments to suppliers", "Prepaid licenses", "Prepaid maintenance"],
+      "common_variations": ["Prepaid expenses and other current assets", "Advance payments", "Prepayments", "Deferred charges", "Prepaid costs", "Other prepaid expenses"],
+      "excludes": ["Long-term prepaid expenses", "Deposits (refundable)", "Deferred tax assets"]
+    },
+    "OTHER_CURRENT_ASSETS": {
+      "description": "Current assets that don't fit into other specific categories, convertible to cash within one year",
+      "includes": ["Tax refunds receivable", "Employee advances", "Accrued income", "Derivative assets", "Assets held for sale", "Other receivables"],
+      "common_variations": ["Other current assets", "Miscellaneous current assets", "Sundry debtors", "Other receivables", "Current portion of long-term assets", "Accrued revenues"],
+      "excludes": ["Non-current assets", "Long-term receivables"]
+    },
+    "TOTAL_CURRENT_ASSETS": {
+      "description": "Sum of all assets expected to be converted to cash or used within one year",
+      "includes": ["Sum of cash, short-term investments, receivables, inventory, prepaid expenses, and other current assets"],
+      "common_variations": ["Total current assets", "Current assets", "Total short-term assets", "Circulating assets", "Liquid assets total"],
+      "excludes": ["Non-current assets", "Long-term assets"]
+    },
+    "PROPERTY_PLANT_EQUIPMENT_NET": {
+      "description": "Tangible fixed assets used in operations, net of accumulated depreciation",
+      "includes": ["Land", "Buildings", "Machinery and equipment", "Furniture and fixtures", "Vehicles", "Computer equipment", "Construction in progress"],
+      "common_variations": ["Property, plant and equipment, net", "Fixed assets, net", "Plant and equipment", "Tangible fixed assets", "PP&E, net of depreciation", "Net fixed assets"],
+      "excludes": ["Investment property", "Intangible assets", "Assets held for sale"]
+    },
+    "GOODWILL": {
+      "description": "Premium paid over fair value of net assets in business acquisitions",
+      "includes": ["Goodwill from acquisitions", "Purchased goodwill", "Acquisition goodwill"],
+      "common_variations": ["Goodwill", "Goodwill, net", "Acquisition goodwill", "Purchased goodwill", "Goodwill and intangible assets (if combined)"],
+      "excludes": ["Internally generated goodwill", "Other intangible assets", "Brand value (unless acquired)"]
+    },
+    "INTANGIBLE_ASSETS": {
+      "description": "Non-physical assets with economic value, excluding goodwill",
+      "includes": ["Patents", "Trademarks", "Copyrights", "Software", "Customer relationships", "Brand names", "Licenses", "Development costs"],
+      "common_variations": ["Intangible assets, net", "Intellectual property", "Patents and trademarks", "Software and licenses", "Intangibles", "Other intangible assets"],
+      "excludes": ["Goodwill", "Research and development costs (expensed)", "Human capital"]
+    },
+    "LONG_TERM_INVESTMENTS": {
+      "description": "Investments held for more than one year, including equity and debt securities",
+      "includes": ["Equity method investments", "Available-for-sale securities", "Held-to-maturity investments", "Investment in subsidiaries", "Joint venture investments"],
+      "common_variations": ["Long-term investments", "Investment securities", "Investments in associates", "Non-current investments", "Investment in affiliates", "Financial assets"],
+      "excludes": ["Short-term investments", "Trading securities", "Cash equivalents"]
+    },
+    "OTHER_NON_CURRENT_ASSETS": {
+      "description": "Long-term assets that don't fit into other specific non-current categories",
+      "includes": ["Deferred tax assets", "Long-term receivables", "Deposits", "Long-term prepaid expenses", "Investment property", "Pension assets"],
+      "common_variations": ["Other non-current assets", "Other long-term assets", "Miscellaneous assets", "Sundry assets", "Long-term prepayments", "Deferred charges"],
+      "excludes": ["Current assets", "PP&E", "Intangible assets", "Goodwill", "Long-term investments"]
+    },
+    "TOTAL_ASSETS": {
+      "description": "Sum of all current and non-current assets owned by the company",
+      "includes": ["Sum of all asset categories"],
+      "common_variations": ["Total assets", "Total resources", "Sum of assets", "Assets total", "Grand total assets"],
+      "excludes": ["Liabilities", "Equity", "Off-balance sheet items"]
+    },
+    "ACCOUNTS_PAYABLE": {
+      "description": "Amounts owed to suppliers for goods or services purchased on credit",
+      "includes": ["Trade payables", "Supplier payables", "Accounts payable", "Trade creditors", "Vendor payables"],
+      "common_variations": ["Accounts payable", "Trade payables", "Trade creditors", "Accounts payable and accrued liabilities", "Supplier payables", "Creditors"],
+      "excludes": ["Accrued expenses", "Notes payable", "Employee payables", "Tax payables"]
+    },
+    "SHORT_TERM_DEBT": {
+      "description": "Debt obligations due within one year",
+      "includes": ["Bank loans (short-term)", "Commercial paper", "Current portion of long-term debt", "Lines of credit", "Notes payable (short-term)"],
+      "common_variations": ["Short-term debt", "Current portion of long-term debt", "Bank borrowings", "Short-term borrowings", "Notes payable", "Current debt"],
+      "excludes": ["Long-term debt", "Accounts payable", "Accrued liabilities"]
+    },
+    "ACCRUED_LIABILITIES": {
+      "description": "Expenses incurred but not yet paid, due within one year",
+      "includes": ["Accrued wages", "Accrued interest", "Accrued taxes", "Accrued utilities", "Accrued professional fees", "Employee benefits payable"],
+      "common_variations": ["Accrued liabilities", "Accrued expenses", "Accruals", "Accrued payroll", "Other accrued liabilities", "Expenses payable"],
+      "excludes": ["Accounts payable", "Deferred revenue", "Long-term accrued liabilities"]
+    },
+    "DEFERRED_REVENUE": {
+      "description": "Cash received in advance for goods or services not yet delivered",
+      "includes": ["Unearned revenue", "Advance payments from customers", "Deferred income", "Customer deposits", "Subscription revenue received in advance"],
+      "common_variations": ["Deferred revenue", "Unearned revenue", "Advance from customers", "Customer prepayments", "Deferred income", "Contract liabilities"],
+      "excludes": ["Accounts payable", "Accrued liabilities", "Long-term deferred revenue"]
+    },
+    "OTHER_CURRENT_LIABILITIES": {
+      "description": "Current liabilities that don't fit into other specific categories, due within one year",
+      "includes": ["Dividends payable", "Current tax payable", "Derivative liabilities", "Provisions (short-term)", "Other payables"],
+      "common_variations": ["Other current liabilities", "Miscellaneous current liabilities", "Other payables", "Sundry creditors", "Current provisions", "Other accruals"],
+      "excludes": ["Non-current liabilities", "Long-term debt", "Accounts payable"]
+    },
+    "TOTAL_CURRENT_LIABILITIES": {
+      "description": "Sum of all liabilities due within one year",
+      "includes": ["Sum of accounts payable, short-term debt, accrued liabilities, deferred revenue, and other current liabilities"],
+      "common_variations": ["Total current liabilities", "Current liabilities", "Short-term liabilities", "Total short-term obligations"],
+      "excludes": ["Non-current liabilities", "Long-term debt", "Equity"]
+    },
+    "LONG_TERM_DEBT": {
+      "description": "Debt obligations due beyond one year",
+      "includes": ["Long-term bank loans", "Bonds payable", "Mortgages payable", "Long-term notes payable", "Lease obligations (long-term)"],
+      "common_variations": ["Long-term debt", "Non-current debt", "Long-term borrowings", "Bonds and long-term debt", "Long-term loans", "Non-current borrowings"],
+      "excludes": ["Current portion of long-term debt", "Short-term debt", "Accounts payable"]
+    },
+    "DEFERRED_TAX_LIABILITIES": {
+      "description": "Tax obligations arising from temporary differences between book and tax accounting",
+      "includes": ["Deferred tax liabilities", "Future tax obligations", "Tax deferrals"],
+      "common_variations": ["Deferred tax liabilities", "Deferred income taxes", "Non-current tax liabilities", "Future tax payable", "Deferred taxation"],
+      "excludes": ["Current tax payable", "Deferred tax assets", "Income tax provisions"]
+    },
+    "OTHER_NON_CURRENT_LIABILITIES": {
+      "description": "Long-term liabilities that don't fit into other specific non-current categories",
+      "includes": ["Pension obligations", "Long-term provisions", "Long-term deferred revenue", "Asset retirement obligations", "Long-term accrued liabilities"],
+      "common_variations": ["Other non-current liabilities", "Other long-term liabilities", "Long-term provisions", "Employee benefit obligations", "Other long-term payables"],
+      "excludes": ["Current liabilities", "Long-term debt", "Deferred tax liabilities"]
+    },
+    "TOTAL_LIABILITIES": {
+      "description": "Sum of all current and non-current liabilities",
+      "includes": ["Sum of all liability categories"],
+      "common_variations": ["Total liabilities", "Total obligations", "Sum of liabilities", "Liabilities total", "Total debt and liabilities"],
+      "excludes": ["Shareholders' equity", "Assets", "Contingent liabilities"]
+    },
+    "COMMON_STOCK": {
+      "description": "Par value of issued common shares representing ownership in the company",
+      "includes": ["Common stock at par", "Ordinary shares", "Share capital", "Capital stock", "Issued shares"],
+      "common_variations": ["Common stock", "Share capital", "Ordinary shares", "Capital stock", "Common shares", "Issued capital"],
+      "excludes": ["Additional paid-in capital", "Preferred stock", "Treasury stock", "Retained earnings"]
+    },
+    "RETAINED_EARNINGS": {
+      "description": "Cumulative earnings retained in the business after dividend payments",
+      "includes": ["Accumulated earnings", "Undistributed profits", "Earnings retained", "Accumulated profits"],
+      "common_variations": ["Retained earnings", "Accumulated earnings", "Undistributed profits", "Earnings retained in business", "Accumulated profits", "Revenue reserves"],
+      "excludes": ["Current year net income", "Dividends declared", "Capital reserves", "Additional paid-in capital"]
+    },
+    "ACCUMULATED_OTHER_COMPREHENSIVE_INCOME": {
+      "description": "Cumulative gains and losses not included in net income",
+      "includes": ["Foreign currency translation adjustments", "Unrealized gains/losses on securities", "Pension adjustments", "Derivative gains/losses"],
+      "common_variations": ["Accumulated other comprehensive income", "Other comprehensive income", "Currency translation reserve", "Revaluation reserve", "AOCI"],
+      "excludes": ["Net income", "Retained earnings", "Realized gains/losses"]
+    },
+    "TREASURY_STOCK": {
+      "description": "Company's own shares that have been repurchased and are held by the company",
+      "includes": ["Repurchased shares", "Own shares held", "Treasury shares", "Stock buybacks"],
+      "common_variations": ["Treasury stock", "Treasury shares", "Own shares", "Repurchased shares", "Stock held in treasury", "Share buybacks"],
+      "excludes": ["Outstanding shares", "Authorized shares", "Issued shares"]
+    },
+    "TOTAL_SHAREHOLDERS_EQUITY": {
+      "description": "Total ownership interest of shareholders in the company",
+      "includes": ["Sum of common stock, retained earnings, other comprehensive income, less treasury stock"],
+      "common_variations": ["Total shareholders' equity", "Total stockholders' equity", "Total equity", "Shareholders' funds", "Net worth", "Owner's equity"],
+      "excludes": ["Total liabilities", "Minority interest", "Non-controlling interests"]
+    },
+    "OTHER": {
+      "description": "Line items that don't clearly fit into any of the above standardized categories",
+      "includes": ["Unusual or company-specific items", "Items requiring manual review", "Ambiguous line items"],
+      "common_variations": ["Various non-standard items"],
+      "excludes": ["Items that can be clearly classified in other categories"]
+    }
+  },
+  
+  "few_shot_examples": [
+    {
+      "line_item": "Cash and short-term deposits",
+      "standardized_category": "CASH_AND_CASH_EQUIVALENTS",
+      "reasoning": "This clearly refers to cash and highly liquid short-term deposits"
+    },
+    {
+      "line_item": "Trade receivables, net",
+      "standardized_category": "ACCOUNTS_RECEIVABLE",
+      "reasoning": "Trade receivables are amounts owed by customers for goods/services sold"
+    },
+    {
+      "line_item": "Raw materials and finished goods",
+      "standardized_category": "INVENTORY",
+      "reasoning": "This represents inventory items held for production or sale"
+    },
+    {
+      "line_item": "Buildings and equipment, net of depreciation",
+      "standardized_category": "PROPERTY_PLANT_EQUIPMENT_NET",
+      "reasoning": "This refers to fixed assets used in operations, net of accumulated depreciation"
+    },
+    {
+      "line_item": "Brand names and trademarks",
+      "standardized_category": "INTANGIBLE_ASSETS",
+      "reasoning": "These are identifiable non-physical assets with economic value"
+    },
+    {
+      "line_item": "Trade creditors",
+      "standardized_category": "ACCOUNTS_PAYABLE",
+      "reasoning": "Trade creditors represent amounts owed to suppliers"
+    },
+    {
+      "line_item": "Bank borrowings due within one year",
+      "standardized_category": "SHORT_TERM_DEBT",
+      "reasoning": "This is debt that must be repaid within 12 months"
+    },
+    {
+      "line_item": "Long-term loans and bonds",
+      "standardized_category": "LONG_TERM_DEBT",
+      "reasoning": "This represents debt obligations due beyond one year"
+    },
+    {
+      "line_item": "Share capital",
+      "standardized_category": "COMMON_STOCK",
+      "reasoning": "This represents the par value of issued common shares"
+    },
+    {
+      "line_item": "Accumulated profits",
+      "standardized_category": "RETAINED_EARNINGS",
+      "reasoning": "This represents cumulative earnings retained in the business"
+    }
+  ],
+  
+  "group_instruction_template": "You are analyzing a {group_type} section of a balance sheet to standardize all line items within this group. This approach allows you to:\n1. Understand the structure and relationships between items within this {group_type} group\n2. Ensure consistent classification logic within the group\n3. Properly identify totals, subtotals, and their components within this section\n4. Disambiguate items based on their context within the {group_type} group\n5. Distinguish between current and non-current items based on their position\n\n{group_type} Section Line Items:\n{group_items}\n\nFor each line item in this {group_type} section, determine the most appropriate standardized category. Consider:\n- The position of the item within the {group_type} structure (current vs non-current)\n- Relationships to other line items and subtotals within this group\n- The hierarchical relationships (components vs. totals)\n- Standard {group_type} ordering and presentation\n\nRespond with a JSON object where each key is the exact line item name and the value is the standardized category name.",
+  
+  "group_response_format": "Return a JSON object with exact line item names as keys and standardized category names as values. Only include categories relevant to the {group_type} group being processed.",
+  
+  "assets_categories": [
+    "CASH_AND_CASH_EQUIVALENTS",
+    "SHORT_TERM_INVESTMENTS", 
+    "ACCOUNTS_RECEIVABLE",
+    "INVENTORY",
+    "PREPAID_EXPENSES",
+    "OTHER_CURRENT_ASSETS",
+    "TOTAL_CURRENT_ASSETS",
+    "PROPERTY_PLANT_EQUIPMENT_NET",
+    "GOODWILL",
+    "INTANGIBLE_ASSETS",
+    "LONG_TERM_INVESTMENTS",
+    "OTHER_NON_CURRENT_ASSETS",
+    "TOTAL_ASSETS"
+  ],
+  
+  "liabilities_equity_categories": [
+    "ACCOUNTS_PAYABLE",
+    "SHORT_TERM_DEBT",
+    "ACCRUED_LIABILITIES", 
+    "DEFERRED_REVENUE",
+    "OTHER_CURRENT_LIABILITIES",
+    "TOTAL_CURRENT_LIABILITIES",
+    "LONG_TERM_DEBT",
+    "DEFERRED_TAX_LIABILITIES",
+    "OTHER_NON_CURRENT_LIABILITIES", 
+    "TOTAL_LIABILITIES",
+    "COMMON_STOCK",
+    "RETAINED_EARNINGS",
+    "ACCUMULATED_OTHER_COMPREHENSIVE_INCOME",
+    "TREASURY_STOCK",
+    "TOTAL_SHAREHOLDERS_EQUITY"
+  ],
+  
+  "conversation_history": [],
+  
+  "response_format": "Return only the standardized category name (e.g., 'CASH_AND_CASH_EQUIVALENTS'). Do not include any explanation or additional text."
+}
