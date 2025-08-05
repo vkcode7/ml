@@ -1,3 +1,42 @@
+"""
+
+text analysis file:
+
+BALANCE SHEET STANDARDIZATION ANALYSIS
+==================================================
+
+SUMMARY STATISTICS
+--------------------
+Total items processed: 21
+Confidence distribution: {'HIGH': 15, 'MEDIUM': 4, 'LOW': 2}
+Category distribution: {'CASH_AND_CASH_EQUIVALENTS': 1, 'ACCOUNTS_RECEIVABLE': 1, ...}
+
+ASSETS GROUP ANALYSIS
+=====================
+
+Line Item: Cash and cash equivalents
+Category: CASH_AND_CASH_EQUIVALENTS
+Confidence: HIGH
+Reasoning: This line item clearly represents highly liquid assets...
+Alternatives considered: None
+Timestamp: 2025-01-15T10:30:45
+
+
+reasoning output:
+{
+  "Cash and cash equivalents": {
+    "group": "ASSETS",
+    "category": "CASH_AND_CASH_EQUIVALENTS", 
+    "reasoning": "This line item clearly represents...",
+    "confidence": "HIGH",
+    "alternative_categories": [],
+    "timestamp": "2025-01-15T10:30:45"
+  }
+}
+
+"""
+
+
 import json
 import pandas as pd
 from typing import Dict, Any, List
