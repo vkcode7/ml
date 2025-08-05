@@ -186,7 +186,217 @@ class BalanceSheetStandardizer:
         
         return "\n".join(prompt_parts)
     
-    def process_balance_sheet_by_groups(self, df: pd.DataFrame, ai_client_function, group_column: str = None) -> pd.DataFrame:
+    def process_balance_sheet_by_groups(self, df: pd.DataFrame, ai_client_function, group_column: str = None) -> tuple:
+        """
+        Process balance sheet by groups (Assets, then Liabilities & Equity) with detailed reasoning.
+        
+        Args:
+            df (pd.DataFrame): DataFrame with 'Line Item' column
+            ai_client_function: Function that takes a prompt and returns AI response
+            group_column (str): Optional column that explicitly identifies groups
+            
+        Returns:
+            tuple: (result_df, reasoning_data) where reasoning_data contains detailed analysis
+        """
+        # Identify balance sheet groups
+        groups = self.identify_balance_sheet_groups(df, group_column)
+        
+        # Initialize results
+        all_mappings = {}
+        all_reasoning = {}
+        
+        # Process each group
+        for group_type, group_df in groups.items():
+            if len(group_df) == 0:
+                continue
+                
+            print(f"\nProcessing {group_type} group ({len(group_df)} items)...")
+            
+            # Extract line items for this group
+            group_line_items = group_df['Line Item'].tolist()
+            
+            # Build group-specific prompt
+            prompt = self.build_group_prompt(group_line_items, group_type)
+            
+            # Get AI response
+            response = ai_client_function(prompt)
+            
+            # Parse JSON response with reasoning
+            try:
+                import json
+                group_response = json.loads(response)
+                
+                # Extract mappings and reasoning
+                for item, details in group_response.items():
+                    if isinstance(details, dict) and 'category' in details:
+                        # New format with reasoning
+                        all_mappings[item] = details['category']
+                        all_reasoning[item] = {
+                            'group': group_type,
+                            'category': details['category'],
+                            'reasoning': details.get('reasoning', 'No reasoning provided'),
+                            'confidence': details.get('confidence', 'UNKNOWN'),
+                            'alternative_categories': details.get('alternative_categories', []),
+                            'timestamp': pd.Timestamp.now().isoformat()
+                        }
+                    else:
+                        # Fallback for simple format
+                        all_mappings[item] = str(details)
+                        all_reasoning[item] = {
+                            'group': group_type,
+                            'category': str(details),
+                            'reasoning': 'Simple classification without detailed reasoning',
+                            'confidence': 'UNKNOWN',
+                            'alternative_categories': [],
+                            'timestamp': pd.Timestamp.now().isoformat()
+                        }
+                    
+                    print(f"  {item} -> {all_mappings[item]} (Confidence: {all_reasoning[item]['confidence']})")
+                    
+            except json.JSONDecodeError:
+                print(f"Error: AI response for {group_type} is not valid JSON. Skipping group.")
+                # Log the raw response for debugging
+                all_reasoning[f"{group_type}_ERROR"] = {
+                    'group': group_type,
+                    'category': 'ERROR',
+                    'reasoning': f'JSON parsing failed. Raw response: {response[:500]}...',
+                    'confidence': 'ERROR',
+                    'alternative_categories': [],
+                    'timestamp': pd.Timestamp.now().isoformat()
+                }
+                continue
+        
+        # Create result dataframe
+        result_df = df.copy()
+        standardized_categories = []
+        confidence_levels = []
+        
+        for line_item in df['Line Item']:
+            if line_item in all_mappings:
+                category = self.validate_response(all_mappings[line_item])
+                standardized_categories.append(category)
+                confidence_levels.append(all_reasoning[line_item]['confidence'])
+            else:
+                print(f"Warning: No mapping found for '{line_item}', defaulting to 'OTHER'")
+                standardized_categories.append("OTHER")
+                confidence_levels.append("LOW")
+                # Add reasoning for missing items
+                all_reasoning[line_item] = {
+                    'group': 'UNKNOWN',
+                    'category': 'OTHER',
+                    'reasoning': 'No mapping found in AI response, defaulted to OTHER',
+                    'confidence': 'LOW',
+                    'alternative_categories': [],
+                    'timestamp': pd.Timestamp.now().isoformat()
+                }
+        
+        result_df['Standardized_Category'] = standardized_categories
+        result_df['Confidence'] = confidence_levels
+        
+        return result_df, all_reasoning
+    
+    def save_reasoning_analysis(self, reasoning_data: Dict, filepath: str):
+        """
+        Save detailed reasoning analysis to a text file for debugging and audit purposes.
+        
+        Args:
+            reasoning_data (Dict): Reasoning data from processing
+            filepath (str): Path to save the analysis file
+        """
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write("BALANCE SHEET STANDARDIZATION ANALYSIS\n")
+            f.write("=" * 50 + "\n\n")
+            
+            # Summary statistics
+            total_items = len(reasoning_data)
+            confidence_counts = {}
+            category_counts = {}
+            
+            for item, details in reasoning_data.items():
+                if details['category'] != 'ERROR':
+                    conf = details['confidence']
+                    cat = details['category']
+                    confidence_counts[conf] = confidence_counts.get(conf, 0) + 1
+                    category_counts[cat] = category_counts.get(cat, 0) + 1
+            
+            f.write("SUMMARY STATISTICS\n")
+            f.write("-" * 20 + "\n")
+            f.write(f"Total items processed: {total_items}\n")
+            f.write(f"Confidence distribution: {confidence_counts}\n")
+            f.write(f"Category distribution: {dict(sorted(category_counts.items()))}\n\n")
+            
+            # Group analysis
+            groups = {}
+            for item, details in reasoning_data.items():
+                group = details['group']
+                if group not in groups:
+                    groups[group] = []
+                groups[group].append((item, details))
+            
+            # Detailed analysis by group
+            for group, items in groups.items():
+                f.write(f"\n{group} GROUP ANALYSIS\n")
+                f.write("=" * (len(group) + 15) + "\n\n")
+                
+                for item, details in items:
+                    f.write(f"Line Item: {item}\n")
+                    f.write(f"Category: {details['category']}\n")
+                    f.write(f"Confidence: {details['confidence']}\n")
+                    f.write(f"Reasoning: {details['reasoning']}\n")
+                    
+                    if details['alternative_categories']:
+                        f.write(f"Alternatives considered: {', '.join(details['alternative_categories'])}\n")
+                    
+                    f.write(f"Timestamp: {details['timestamp']}\n")
+                    f.write("-" * 40 + "\n\n")
+            
+            # Quality analysis
+            f.write("\nQUALITY ANALYSIS\n")
+            f.write("=" * 16 + "\n\n")
+            
+            # High confidence items
+            high_conf = [item for item, details in reasoning_data.items() 
+                        if details['confidence'] == 'HIGH']
+            f.write(f"High confidence classifications: {len(high_conf)} items\n")
+            
+            # Low confidence items (potential issues)
+            low_conf = [item for item, details in reasoning_data.items() 
+                       if details['confidence'] == 'LOW']
+            if low_conf:
+                f.write(f"\nLOW CONFIDENCE ITEMS (require review):\n")
+                for item in low_conf:
+                    details = reasoning_data[item]
+                    f.write(f"- {item}: {details['category']} ({details['reasoning'][:100]}...)\n")
+            
+            # Items with alternatives
+            with_alternatives = [item for item, details in reasoning_data.items()
+                               if details['alternative_categories']]
+            if with_alternatives:
+                f.write(f"\nITEMS WITH ALTERNATIVE CATEGORIES CONSIDERED:\n")
+                for item in with_alternatives:
+                    details = reasoning_data[item]
+                    f.write(f"- {item}: Chose {details['category']} over {details['alternative_categories']}\n")
+            
+            # Error items
+            error_items = [item for item, details in reasoning_data.items()
+                          if details['category'] == 'ERROR']
+            if error_items:
+                f.write(f"\nERROR ITEMS (require manual review):\n")
+                for item in error_items:
+                    details = reasoning_data[item]
+                    f.write(f"- {item}: {details['reasoning']}\n")
+
+    def save_reasoning_json(self, reasoning_data: Dict, filepath: str):
+        """
+        Save reasoning data as JSON for programmatic analysis.
+        
+        Args:
+            reasoning_data (Dict): Reasoning data from processing
+            filepath (str): Path to save the JSON file
+        """
+        import json
+        with open(filepath, 'w', encoding='utf-8') as f:
+            json.dump(reasoning_data, f, indent=2, ensure_ascii=False)
         """
         Process balance sheet by groups (Assets, then Liabilities & Equity).
         
@@ -403,7 +613,41 @@ class BalanceSheetStandardizer:
             json.dump(self.conversation_history, f, indent=2)
 
 # Example usage
-def example_ai_client(prompt: str) -> str:
+def enhanced_example_ai_client(prompt: str) -> str:
+    """
+    Enhanced placeholder for AI client that returns reasoning-rich responses.
+    Replace this with your actual AI API call.
+    
+    Args:
+        prompt (str): The prompt to send to AI
+        
+    Returns:
+        str: AI response with detailed reasoning
+    """
+    # This is a more realistic example response with reasoning
+    sample_response = {
+        "Cash and cash equivalents": {
+            "category": "CASH_AND_CASH_EQUIVALENTS",
+            "reasoning": "This line item clearly represents highly liquid assets that can be readily converted to cash. The terminology 'cash equivalents' indicates short-term, highly liquid investments that are readily convertible to known amounts of cash.",
+            "confidence": "HIGH",
+            "alternative_categories": []
+        },
+        "Short-term investments": {
+            "category": "SHORT_TERM_INVESTMENTS", 
+            "reasoning": "These are marketable securities with maturities likely between 90 days and 1 year. Positioned in current assets section indicates short-term nature.",
+            "confidence": "HIGH",
+            "alternative_categories": ["CASH_AND_CASH_EQUIVALENTS"]
+        },
+        "Trade receivables": {
+            "category": "ACCOUNTS_RECEIVABLE",
+            "reasoning": "Standard terminology for amounts owed by customers for goods sold or services provided on credit. 'Trade' qualifier confirms these are operational receivables.",
+            "confidence": "HIGH", 
+            "alternative_categories": []
+        }
+    }
+    
+    import json
+    return json.dumps(sample_response)
     """
     Placeholder for your AI client function.
     Replace this with your actual AI API call (OpenAI, Claude, etc.)
@@ -450,13 +694,29 @@ def main():
     # Initialize standardizer
     standardizer = BalanceSheetStandardizer('balance_sheet_prompt.json')
     
-    # Process balance sheet by groups (recommended approach)
-    print("Processing by Groups (Assets, then Liabilities & Equity):")
-    result_df_groups = standardizer.process_balance_sheet_by_groups(df, example_ai_client)
+    # Process balance sheet by groups with reasoning
+    print("Processing by Groups with Detailed Reasoning:")
+    result_df, reasoning_data = standardizer.process_balance_sheet_by_groups(df, enhanced_example_ai_client)
     
     # Display results
     print("\nGroup-Based Processing Results:")
-    print(result_df_groups[['Line Item', 'Standardized_Category']])
+    print(result_df[['Line Item', 'Standardized_Category', 'Confidence']])
+    
+    # Save detailed reasoning analysis
+    standardizer.save_reasoning_analysis(reasoning_data, 'balance_sheet_analysis.txt')
+    standardizer.save_reasoning_json(reasoning_data, 'balance_sheet_reasoning.json')
+    
+    print(f"\nReasoning analysis saved to:")
+    print(f"- Text format: balance_sheet_analysis.txt")
+    print(f"- JSON format: balance_sheet_reasoning.json")
+    
+    # Show sample reasoning
+    print(f"\nSample reasoning for debugging:")
+    for item, details in list(reasoning_data.items())[:3]:
+        print(f"\n{item}:")
+        print(f"  Category: {details['category']}")
+        print(f"  Confidence: {details['confidence']}")
+        print(f"  Reasoning: {details['reasoning'][:100]}...")
     
     # Optional: Show group identification
     groups = standardizer.identify_balance_sheet_groups(df)
