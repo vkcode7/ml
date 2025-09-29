@@ -1,6 +1,7 @@
 """
 PDF Financial Statement Table Extractor for 10-K SEC Filings
 Extracts Balance Sheet, Income Statement, and Cash Flow Statement from PDF files
+Supports multi-page statements that span across consecutive pages
 Uses OpenAI GPT-4o and LangGraph with retry logic (max 3 attempts per page)
 """
 
@@ -29,6 +30,7 @@ class TableExtractionState(TypedDict):
     attempt: int
     statement_type: str
     has_target_statement: bool
+    is_continuation: bool
     original_headers: List[str] | None
     normalized_headers: List[str] | None
     table_data: dict | None
@@ -40,15 +42,18 @@ class TableExtractionState(TypedDict):
 class FinancialStatement:
     """Container for a financial statement with metadata"""
     def __init__(self, dataframe: pd.DataFrame, statement_type: StatementType, 
-                 page_number: int, confidence: str = "high"):
+                 page_numbers: List[int], confidence: str = "high", is_multi_page: bool = False):
         self.dataframe = dataframe
         self.statement_type = statement_type
-        self.page_number = page_number
+        self.page_numbers = page_numbers
         self.confidence = confidence
+        self.is_multi_page = is_multi_page
         
     def __repr__(self):
+        pages_str = f"{self.page_numbers[0]}" if len(self.page_numbers) == 1 else f"{self.page_numbers[0]}-{self.page_numbers[-1]}"
+        multi_page_str = " (multi-page)" if self.is_multi_page else ""
         return (f"FinancialStatement(type={self.statement_type.value}, "
-                f"page={self.page_number}, shape={self.dataframe.shape}, "
+                f"pages={pages_str}{multi_page_str}, shape={self.dataframe.shape}, "
                 f"confidence={self.confidence})")
 
 
@@ -56,6 +61,7 @@ class PDFFinancialStatementExtractor:
     """
     Extracts Balance Sheet, Income Statement, and Cash Flow Statement 
     from 10-K SEC filing PDFs using OpenAI GPT-4o and LangGraph
+    Handles multi-page statements that span across consecutive pages
     """
     
     def __init__(self, api_key: str, max_attempts: int = 3, dpi: int = 200):
@@ -126,6 +132,89 @@ class PDFFinancialStatementExtractor:
         else:
             return StatementType.UNKNOWN
     
+    def _check_if_continuation(self, current_page_base64: str, previous_statement_type: Optional[StatementType],
+                               previous_headers: Optional[List[str]]) -> tuple[bool, StatementType]:
+        """
+        Check if the current page is a continuation of the previous page's financial statement
+        
+        Args:
+            current_page_base64: Base64 encoded current page image
+            previous_statement_type: Statement type from previous page
+            previous_headers: Headers from previous page
+            
+        Returns:
+            Tuple of (is_continuation: bool, statement_type: StatementType)
+        """
+        if previous_statement_type is None or previous_statement_type == StatementType.UNKNOWN:
+            return False, StatementType.UNKNOWN
+        
+        print(f"\n[Continuation Check] Checking if page continues {previous_statement_type.value}...")
+        
+        try:
+            prompt = f"""Analyze this PDF page and determine if it's a CONTINUATION of a financial statement from the previous page.
+
+Previous statement type: {previous_statement_type.value}
+Previous statement headers: {json.dumps(previous_headers) if previous_headers else "Not available"}
+
+Check for these indicators of continuation:
+1. Same column headers as previous page (or similar structure)
+2. No statement title at the top (or says "continued")
+3. Table continues with more line items
+4. Word "continued" or "(continued)" appears
+5. Same statement type indicators (same financial metrics/categories)
+
+Return ONLY this JSON:
+{{
+    "is_continuation": true/false,
+    "confidence": "high" | "medium" | "low",
+    "reasoning": "brief explanation of why it is or isn't a continuation",
+    "has_headers": true/false,
+    "headers": ["header1", "header2", ...] (if headers are present)
+}}
+
+If the page has a NEW statement title or is clearly a different statement, set "is_continuation" to false."""
+
+            response = self.client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{current_page_base64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=1024,
+                temperature=0
+            )
+            
+            content = response.choices[0].message.content
+            
+            if "```json" in content:
+                content = content.split("```json")[1].split("```")[0].strip()
+            elif "```" in content:
+                content = content.split("```")[1].split("```")[0].strip()
+            
+            result = json.loads(content)
+            is_continuation = result.get("is_continuation", False)
+            confidence = result.get("confidence", "unknown")
+            reasoning = result.get("reasoning", "")
+            
+            print(f"   Continuation: {is_continuation} (Confidence: {confidence})")
+            print(f"   Reasoning: {reasoning}")
+            
+            return is_continuation, previous_statement_type if is_continuation else StatementType.UNKNOWN
+            
+        except Exception as e:
+            print(f"   ✗ Error checking continuation: {str(e)}")
+            return False, StatementType.UNKNOWN
+    
     def _extract_statement_type_and_headers_info(self, state: TableExtractionState) -> TableExtractionState:
         """
         First node: Analyze the page to identify statement type and extract header information
@@ -137,10 +226,29 @@ class PDFFinancialStatementExtractor:
             Updated state with statement type and headers info
         """
         attempt = state["attempt"] + 1
-        print(f"\n[Node 1] Analyzing page for statement type and headers (Attempt {attempt})...")
+        is_continuation = state.get("is_continuation", False)
+        
+        if is_continuation:
+            print(f"\n[Node 1] Processing continuation page (Attempt {attempt})...")
+        else:
+            print(f"\n[Node 1] Analyzing page for statement type and headers (Attempt {attempt})...")
         
         try:
-            prompt = """Analyze this PDF page from a 10-K SEC filing and:
+            if is_continuation:
+                # For continuation pages, we already know the statement type
+                # Just check for headers (they might be repeated)
+                prompt = """This page is a CONTINUATION of a financial statement from the previous page.
+
+Check if this page has column headers (sometimes continuation pages repeat headers).
+
+Return ONLY this JSON:
+{
+    "has_headers": true/false,
+    "headers": ["header1", "header2", ...] (if present, otherwise empty array)
+}"""
+            else:
+                # For new pages, do full analysis
+                prompt = """Analyze this PDF page from a 10-K SEC filing and:
 
 1. Check if this page contains a financial statement table
 2. If yes, identify the statement type and extract the column headers
@@ -181,10 +289,8 @@ Extract ALL column headers exactly as they appear, including year/period informa
                 temperature=0
             )
             
-            # Parse the response
             content = response.choices[0].message.content
             
-            # Extract JSON from markdown code blocks if present
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
@@ -192,50 +298,64 @@ Extract ALL column headers exactly as they appear, including year/period informa
             
             result = json.loads(content)
             
-            # Check if it has a financial table
-            has_table = result.get("has_financial_table", False)
-            
-            if not has_table:
-                print("   ✗ No financial statement found on this page")
+            if is_continuation:
+                # For continuation pages, use the statement type from state
+                statement_type = StatementType(state.get("statement_type", StatementType.UNKNOWN.value))
+                headers = result.get("headers", state.get("original_headers", []))
+                
+                print(f"   ✓ Continuation page for {statement_type.value}")
+                print(f"   ✓ Headers: {'Found' if headers else 'Using previous headers'}")
+                
                 return {
                     **state,
                     "attempt": attempt,
-                    "has_target_statement": False,
-                    "statement_type": StatementType.UNKNOWN.value,
-                    "original_headers": None,
+                    "has_target_statement": True,
+                    "original_headers": headers if headers else state.get("original_headers"),
                     "error": None
                 }
-            
-            # Identify statement type
-            statement_name = result.get("statement_name", "")
-            statement_type = self._identify_statement_type(statement_name)
-            
-            if statement_type == StatementType.UNKNOWN:
-                print(f"   ✗ Found table but not a target statement: {statement_name}")
+            else:
+                # For new pages, do full analysis
+                has_table = result.get("has_financial_table", False)
+                
+                if not has_table:
+                    print("   ✗ No financial statement found on this page")
+                    return {
+                        **state,
+                        "attempt": attempt,
+                        "has_target_statement": False,
+                        "statement_type": StatementType.UNKNOWN.value,
+                        "original_headers": None,
+                        "error": None
+                    }
+                
+                statement_name = result.get("statement_name", "")
+                statement_type = self._identify_statement_type(statement_name)
+                
+                if statement_type == StatementType.UNKNOWN:
+                    print(f"   ✗ Found table but not a target statement: {statement_name}")
+                    return {
+                        **state,
+                        "attempt": attempt,
+                        "has_target_statement": False,
+                        "statement_type": StatementType.UNKNOWN.value,
+                        "original_headers": None,
+                        "error": None
+                    }
+                
+                headers = result.get("headers", [])
+                confidence = result.get("confidence", "unknown")
+                
+                print(f"   ✓ Found {statement_type.value}: {statement_name}")
+                print(f"   ✓ Extracted {len(headers)} column headers (Confidence: {confidence})")
+                
                 return {
                     **state,
                     "attempt": attempt,
-                    "has_target_statement": False,
-                    "statement_type": StatementType.UNKNOWN.value,
-                    "original_headers": None,
+                    "has_target_statement": True,
+                    "statement_type": statement_type.value,
+                    "original_headers": headers,
                     "error": None
                 }
-            
-            # Extract headers
-            headers = result.get("headers", [])
-            confidence = result.get("confidence", "unknown")
-            
-            print(f"   ✓ Found {statement_type.value}: {statement_name}")
-            print(f"   ✓ Extracted {len(headers)} column headers (Confidence: {confidence})")
-            
-            return {
-                **state,
-                "attempt": attempt,
-                "has_target_statement": True,
-                "statement_type": statement_type.value,
-                "original_headers": headers,
-                "error": None
-            }
             
         except Exception as e:
             print(f"   ✗ Error in statement type extraction: {str(e)}")
@@ -269,6 +389,16 @@ Extract ALL column headers exactly as they appear, including year/period informa
                     **state,
                     "normalized_headers": [],
                     "error": "No headers found"
+                }
+            
+            # Check if we already have normalized headers from a previous page
+            existing_normalized = state.get("normalized_headers", [])
+            if existing_normalized and state.get("is_continuation", False):
+                print(f"   ✓ Using existing normalized headers for continuation page")
+                return {
+                    **state,
+                    "normalized_headers": existing_normalized,
+                    "error": None
                 }
             
             prompt = f"""Given these column headers from a financial statement, normalize them to a consistent format.
@@ -309,10 +439,8 @@ Maintain the same number and order of headers."""
                 temperature=0
             )
             
-            # Parse the response
             content = response.choices[0].message.content
             
-            # Extract JSON from markdown code blocks if present
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
@@ -333,7 +461,6 @@ Maintain the same number and order of headers."""
             
         except Exception as e:
             print(f"   ✗ Error normalizing headers: {str(e)}")
-            # Fallback: use original headers
             return {
                 **state,
                 "normalized_headers": state.get("original_headers", []),
@@ -351,7 +478,12 @@ Maintain the same number and order of headers."""
             Updated state with extracted table data
         """
         attempt = state["attempt"]
-        print(f"\n[Node 3] Extracting table data with normalized headers...")
+        is_continuation = state.get("is_continuation", False)
+        
+        if is_continuation:
+            print(f"\n[Node 3] Extracting continuation table data...")
+        else:
+            print(f"\n[Node 3] Extracting table data with normalized headers...")
         
         try:
             normalized_headers = state.get("normalized_headers", [])
@@ -360,7 +492,34 @@ Maintain the same number and order of headers."""
             if not normalized_headers:
                 raise ValueError("No normalized headers available for extraction")
             
-            prompt = f"""Extract the complete financial statement table from this PDF page.
+            if is_continuation:
+                prompt = f"""Extract the CONTINUATION of the financial statement table from this page.
+
+This is a CONTINUATION from the previous page.
+Statement Type: {statement_type}
+Expected Column Headers (use these exactly): {json.dumps(normalized_headers)}
+
+Return the data in this JSON format:
+{{
+    "has_table": true,
+    "table": {{
+        "headers": {json.dumps(normalized_headers)},
+        "rows": [
+            ["value1", "value2", ...],
+            ["value1", "value2", ...]
+        ]
+    }},
+    "confidence": "high" | "medium" | "low"
+}}
+
+Important:
+- Extract ONLY the rows from this page (continuation rows)
+- Each row must have exactly {len(normalized_headers)} values
+- Preserve numerical values exactly, including negatives in parentheses
+- Empty cells should be represented as empty strings ""
+- Do NOT include any header rows if they're repeated"""
+            else:
+                prompt = f"""Extract the complete financial statement table from this PDF page.
 
 Statement Type: {statement_type}
 Expected Column Headers (use these exactly): {json.dumps(normalized_headers)}
@@ -406,10 +565,8 @@ Important:
                 temperature=0
             )
             
-            # Parse the response
             content = response.choices[0].message.content
             
-            # Extract JSON from markdown code blocks if present
             if "```json" in content:
                 content = content.split("```json")[1].split("```")[0].strip()
             elif "```" in content:
@@ -417,7 +574,8 @@ Important:
             
             table_data = json.loads(content)
             
-            print(f"   ✓ Extracted table with {len(table_data.get('table', {}).get('rows', []))} rows")
+            rows_extracted = len(table_data.get('table', {}).get('rows', []))
+            print(f"   ✓ Extracted table with {rows_extracted} rows")
             
             return {
                 **state,
@@ -446,7 +604,6 @@ Important:
         print(f"\n[Node 4] Converting to DataFrame...")
         
         try:
-            # If no target statement was found, return empty DataFrame
             if not state.get("has_target_statement", False):
                 return {
                     **state,
@@ -466,7 +623,6 @@ Important:
                     "error": "No table data extracted"
                 }
             
-            # Extract headers and rows
             table = table_data.get("table", {})
             headers = table.get("headers", [])
             rows = table.get("rows", [])
@@ -480,14 +636,11 @@ Important:
                     "error": "Incomplete table structure"
                 }
             
-            # Create DataFrame
             df = pd.DataFrame(rows, columns=headers)
             
-            # Validate: check if all rows have correct number of columns
             if df.shape[1] != len(headers):
                 raise ValueError("Column count mismatch")
             
-            # Check for completely empty dataframe
             if df.empty or (df.shape[0] == 0):
                 raise ValueError("DataFrame is empty")
             
@@ -511,42 +664,22 @@ Important:
             }
     
     def _should_retry(self, state: TableExtractionState) -> str:
-        """
-        Decide whether to retry extraction or end the process
-        
-        Args:
-            state: Current state of extraction
-            
-        Returns:
-            String indicating next action: "end", "retry", or "max_attempts"
-        """
-        # If no target statement found, we're done (no retry needed)
+        """Decide whether to retry extraction or end the process"""
         if not state.get("has_target_statement", False):
             return "end"
         
-        # If valid table created, we're done
         if state.get("is_valid_table") and state.get("dataframe") is not None:
             return "end"
         
-        # If we've reached max attempts, return empty dataframe
         if state["attempt"] >= self.max_attempts:
             print(f"\n   Max attempts ({self.max_attempts}) reached")
             return "max_attempts"
         
-        # Otherwise, retry from the beginning
         print(f"\n   Retrying extraction... (attempt {state['attempt']} of {self.max_attempts})")
         return "retry"
     
     def _return_empty_dataframe(self, state: TableExtractionState) -> TableExtractionState:
-        """
-        Return empty DataFrame after max attempts reached
-        
-        Args:
-            state: Current state
-            
-        Returns:
-            State with empty DataFrame
-        """
+        """Return empty DataFrame after max attempts reached"""
         return {
             **state,
             "dataframe": pd.DataFrame(),
@@ -555,103 +688,87 @@ Important:
         }
     
     def _create_extraction_graph(self) -> StateGraph:
-        """
-        Create the LangGraph workflow for table extraction
-        
-        Workflow:
-        1. extract_statement_type_and_headers_info: Identify statement and extract headers
-        2. normalize_column_headers: Convert headers to standard format
-        3. extract_table_with_gpt4o: Extract complete table with normalized headers
-        4. convert_to_dataframe: Create pandas DataFrame
-        
-        Returns:
-            Compiled LangGraph workflow
-        """
+        """Create the LangGraph workflow for table extraction"""
         workflow = StateGraph(TableExtractionState)
         
-        # Add nodes
         workflow.add_node("extract_statement_type", self._extract_statement_type_and_headers_info)
         workflow.add_node("normalize_headers", self._normalize_column_headers)
         workflow.add_node("extract_table", self._extract_table_with_gpt4o)
         workflow.add_node("convert", self._convert_to_dataframe)
         workflow.add_node("empty_result", self._return_empty_dataframe)
         
-        # Set entry point
         workflow.set_entry_point("extract_statement_type")
         
-        # Define routing function after extract_statement_type
         def route_after_statement_type(state: TableExtractionState) -> str:
             if state.get("has_target_statement", False):
                 return "normalize_headers"
             else:
                 return "end"
         
-        # Add conditional edge after extract_statement_type
         workflow.add_conditional_edges(
             "extract_statement_type",
             route_after_statement_type,
             {
                 "normalize_headers": "normalize_headers",
-                "end": "convert"  # Will return empty DataFrame
+                "end": "convert"
             }
         )
         
-        # Add edges for the main flow
         workflow.add_edge("normalize_headers", "extract_table")
         workflow.add_edge("extract_table", "convert")
         
-        # Add conditional edges from convert (for retry logic)
         workflow.add_conditional_edges(
             "convert",
             self._should_retry,
             {
                 "end": END,
-                "retry": "extract_statement_type",  # Retry from the beginning
+                "retry": "extract_statement_type",
                 "max_attempts": "empty_result"
             }
         )
         
-        # Empty result goes to end
         workflow.add_edge("empty_result", END)
         
         return workflow.compile()
     
-    def extract_from_page(self, pdf_page_image_base64: str) -> tuple[pd.DataFrame, StatementType, str]:
+    def extract_from_page(self, pdf_page_image_base64: str, 
+                         is_continuation: bool = False,
+                         previous_statement_type: Optional[StatementType] = None,
+                         previous_headers: Optional[List[str]] = None) -> tuple[pd.DataFrame, StatementType, str]:
         """
         Extract financial statement from a single PDF page
         
         Args:
             pdf_page_image_base64: Base64 encoded PDF page image
+            is_continuation: Whether this page is a continuation of previous page
+            previous_statement_type: Statement type from previous page (for continuation)
+            previous_headers: Normalized headers from previous page (for continuation)
             
         Returns:
             Tuple of (DataFrame, StatementType, confidence)
         """
-        # Create the graph if not already created
         if self.graph is None:
             self.graph = self._create_extraction_graph()
         
-        # Initialize state
         initial_state = {
             "pdf_page_image": pdf_page_image_base64,
             "attempt": 0,
-            "statement_type": StatementType.UNKNOWN.value,
+            "statement_type": previous_statement_type.value if previous_statement_type else StatementType.UNKNOWN.value,
             "has_target_statement": False,
-            "original_headers": None,
-            "normalized_headers": None,
+            "is_continuation": is_continuation,
+            "original_headers": previous_headers,
+            "normalized_headers": previous_headers if is_continuation else None,
             "table_data": None,
             "dataframe": None,
             "error": None,
             "is_valid_table": False
         }
         
-        # Run the graph
         final_state = self.graph.invoke(initial_state)
         
-        # Get statement type
         statement_type_str = final_state.get("statement_type", StatementType.UNKNOWN.value)
         statement_type = StatementType(statement_type_str)
         
-        # Get confidence
         confidence = "unknown"
         if final_state.get("table_data"):
             confidence = final_state["table_data"].get("confidence", "unknown")
@@ -662,6 +779,7 @@ Important:
                         end_page: Optional[int] = None) -> Dict[StatementType, List[FinancialStatement]]:
         """
         Extract all financial statements from a 10-K PDF file
+        Automatically handles multi-page statements
         
         Args:
             pdf_path: Path to the PDF file
@@ -670,62 +788,187 @@ Important:
             
         Returns:
             Dictionary mapping StatementType to list of FinancialStatement objects
-            
-        Example:
-            >>> extractor = PDFFinancialStatementExtractor(api_key="sk-...")
-            >>> results = extractor.extract_from_pdf("10k_filing.pdf")
-            >>> 
-            >>> # Access balance sheets
-            >>> for stmt in results[StatementType.BALANCE_SHEET]:
-            >>>     print(f"Page {stmt.page_number}:")
-            >>>     print(stmt.dataframe.head())
         """
         print(f"\n{'='*60}")
         print(f"Processing 10-K PDF: {pdf_path}")
         print(f"{'='*60}\n")
         
-        # Convert PDF to images
         page_images = self.convert_pdf_to_images(pdf_path, start_page, end_page)
         
-        # Initialize results dictionary
         results = {
             StatementType.BALANCE_SHEET: [],
             StatementType.INCOME_STATEMENT: [],
             StatementType.CASH_FLOW: []
         }
         
-        # Process each page
+        # Track current statement being built (for multi-page)
+        current_statement_df = None
+        current_statement_type = None
+        current_statement_pages = []
+        current_statement_confidence = None
+        current_normalized_headers = None
+        
         actual_start = start_page
-        for i, page_image in enumerate(page_images):
+        i = 0
+        
+        while i < len(page_images):
             page_num = actual_start + i
+            page_image = page_images[i]
+            
             print(f"\n{'='*60}")
             print(f"Processing Page {page_num}")
             print(f"{'='*60}")
             
-            df, statement_type, confidence = self.extract_from_page(page_image)
+            # Check if this is a continuation of the previous page
+            is_continuation = False
+            if current_statement_type and current_statement_type != StatementType.UNKNOWN:
+                # Check next page for continuation
+                is_continuation, _ = self._check_if_continuation(
+                    page_image, 
+                    current_statement_type,
+                    current_normalized_headers
+                )
+            
+            # Extract from this page
+            df, statement_type, confidence = self.extract_from_page(
+                page_image,
+                is_continuation=is_continuation,
+                previous_statement_type=current_statement_type,
+                previous_headers=current_normalized_headers
+            )
+            
+            # Store normalized headers for potential continuation check
+            if not df.empty and statement_type != StatementType.UNKNOWN:
+                # Get the normalized headers from the extraction
+                temp_graph = self._create_extraction_graph()
+                temp_state = {
+                    "pdf_page_image": page_image,
+                    "attempt": 0,
+                    "statement_type": statement_type.value,
+                    "has_target_statement": True,
+                    "is_continuation": is_continuation,
+                    "original_headers": None,
+                    "normalized_headers": current_normalized_headers if is_continuation else None,
+                    "table_data": None,
+                    "dataframe": None,
+                    "error": None,
+                    "is_valid_table": False
+                }
+                
+                if not is_continuation:
+                    # Extract headers for new statement
+                    try:
+                        state_after_extraction = self._extract_statement_type_and_headers_info(temp_state)
+                        if state_after_extraction.get("original_headers"):
+                            state_after_normalization = self._normalize_column_headers(state_after_extraction)
+                            current_normalized_headers = state_after_normalization.get("normalized_headers")
+                    except:
+                        current_normalized_headers = None
             
             if not df.empty and statement_type != StatementType.UNKNOWN:
-                financial_stmt = FinancialStatement(df, statement_type, page_num, confidence)
-                results[statement_type].append(financial_stmt)
-                print(f"\n✓ SUCCESS: Found {statement_type.value} on page {page_num}")
-                print(f"  - Confidence: {confidence}")
-                print(f"  - Shape: {df.shape}")
+                if is_continuation and current_statement_type == statement_type:
+                    # This is a continuation - merge with previous dataframe
+                    print(f"\n✓ CONTINUATION: Merging with previous {statement_type.value}")
+                    print(f"  - Previous shape: {current_statement_df.shape}")
+                    print(f"  - Current shape: {df.shape}")
+                    
+                    # Concatenate the dataframes
+                    current_statement_df = pd.concat([current_statement_df, df], ignore_index=True)
+                    current_statement_pages.append(page_num)
+                    
+                    print(f"  - Merged shape: {current_statement_df.shape}")
+                    
+                else:
+                    # Save previous statement if exists
+                    if current_statement_df is not None and current_statement_type != StatementType.UNKNOWN:
+                        financial_stmt = FinancialStatement(
+                            current_statement_df,
+                            current_statement_type,
+                            current_statement_pages,
+                            current_statement_confidence,
+                            is_multi_page=(len(current_statement_pages) > 1)
+                        )
+                        results[current_statement_type].append(financial_stmt)
+                        
+                        multi_page_str = f" (spans pages {current_statement_pages[0]}-{current_statement_pages[-1]})" if len(current_statement_pages) > 1 else ""
+                        print(f"\n✓ SAVED: {current_statement_type.value}{multi_page_str}")
+                        print(f"  - Final shape: {current_statement_df.shape}")
+                    
+                    # Start new statement
+                    current_statement_df = df
+                    current_statement_type = statement_type
+                    current_statement_pages = [page_num]
+                    current_statement_confidence = confidence
+                    
+                    print(f"\n✓ NEW STATEMENT: Found {statement_type.value} on page {page_num}")
+                    print(f"  - Confidence: {confidence}")
+                    print(f"  - Shape: {df.shape}")
             else:
+                # No statement found on this page
+                # Save previous statement if exists
+                if current_statement_df is not None and current_statement_type != StatementType.UNKNOWN:
+                    financial_stmt = FinancialStatement(
+                        current_statement_df,
+                        current_statement_type,
+                        current_statement_pages,
+                        current_statement_confidence,
+                        is_multi_page=(len(current_statement_pages) > 1)
+                    )
+                    results[current_statement_type].append(financial_stmt)
+                    
+                    multi_page_str = f" (spans pages {current_statement_pages[0]}-{current_statement_pages[-1]})" if len(current_statement_pages) > 1 else ""
+                    print(f"\n✓ SAVED: {current_statement_type.value}{multi_page_str}")
+                    print(f"  - Final shape: {current_statement_df.shape}")
+                    
+                    # Reset current statement tracking
+                    current_statement_df = None
+                    current_statement_type = None
+                    current_statement_pages = []
+                    current_statement_confidence = None
+                    current_normalized_headers = None
+                
                 print(f"\n✗ No target financial statement found on page {page_num}")
+            
+            i += 1
+        
+        # Save last statement if exists
+        if current_statement_df is not None and current_statement_type != StatementType.UNKNOWN:
+            financial_stmt = FinancialStatement(
+                current_statement_df,
+                current_statement_type,
+                current_statement_pages,
+                current_statement_confidence,
+                is_multi_page=(len(current_statement_pages) > 1)
+            )
+            results[current_statement_type].append(financial_stmt)
+            
+            multi_page_str = f" (spans pages {current_statement_pages[0]}-{current_statement_pages[-1]})" if len(current_statement_pages) > 1 else ""
+            print(f"\n✓ SAVED: {current_statement_type.value}{multi_page_str}")
+            print(f"  - Final shape: {current_statement_df.shape}")
         
         # Print summary
         print(f"\n{'='*60}")
         print("EXTRACTION SUMMARY")
         print(f"{'='*60}")
-        print(f"Balance Sheets found: {len(results[StatementType.BALANCE_SHEET])}")
+        
+        print(f"\nBalance Sheets found: {len(results[StatementType.BALANCE_SHEET])}")
         for stmt in results[StatementType.BALANCE_SHEET]:
-            print(f"  - Page {stmt.page_number}: {stmt.dataframe.shape}")
+            pages_str = f"Page {stmt.page_numbers[0]}" if len(stmt.page_numbers) == 1 else f"Pages {stmt.page_numbers[0]}-{stmt.page_numbers[-1]}"
+            multi_page_marker = " ⚡ MULTI-PAGE" if stmt.is_multi_page else ""
+            print(f"  - {pages_str}: {stmt.dataframe.shape}{multi_page_marker}")
+        
         print(f"\nIncome Statements found: {len(results[StatementType.INCOME_STATEMENT])}")
         for stmt in results[StatementType.INCOME_STATEMENT]:
-            print(f"  - Page {stmt.page_number}: {stmt.dataframe.shape}")
+            pages_str = f"Page {stmt.page_numbers[0]}" if len(stmt.page_numbers) == 1 else f"Pages {stmt.page_numbers[0]}-{stmt.page_numbers[-1]}"
+            multi_page_marker = " ⚡ MULTI-PAGE" if stmt.is_multi_page else ""
+            print(f"  - {pages_str}: {stmt.dataframe.shape}{multi_page_marker}")
+        
         print(f"\nCash Flow Statements found: {len(results[StatementType.CASH_FLOW])}")
         for stmt in results[StatementType.CASH_FLOW]:
-            print(f"  - Page {stmt.page_number}: {stmt.dataframe.shape}")
+            pages_str = f"Page {stmt.page_numbers[0]}" if len(stmt.page_numbers) == 1 else f"Pages {stmt.page_numbers[0]}-{stmt.page_numbers[-1]}"
+            multi_page_marker = " ⚡ MULTI-PAGE" if stmt.is_multi_page else ""
+            print(f"  - {pages_str}: {stmt.dataframe.shape}{multi_page_marker}")
+        
         print(f"{'='*60}\n")
         
         return results
@@ -743,10 +986,34 @@ if __name__ == "__main__":
     # Example: Extract from specific page range
     # results = extractor.extract_from_pdf("apple_10k.pdf", start_page=30, end_page=50)
     
-    # Access extracted statements
+    # Example: Access extracted statements
     # for stmt in results[StatementType.BALANCE_SHEET]:
-    #     print(f"\nBalance Sheet from Page {stmt.page_number}:")
-    #     print(stmt.dataframe)
+    #     if stmt.is_multi_page:
+    #         print(f"\n⚡ Multi-page Balance Sheet (Pages {stmt.page_numbers[0]}-{stmt.page_numbers[-1]}):")
+    #     else:
+    #         print(f"\nBalance Sheet (Page {stmt.page_numbers[0]}):")
+    #     print(f"Shape: {stmt.dataframe.shape}")
+    #     print(stmt.dataframe.head())
     
-    print("PDF Financial Statement Extractor ready!")
-    print("\nWorkflow: Statement Detection → Header Normalization → Table Extraction → DataFrame Creation")
+    # Example: Export to Excel with multi-page indication
+    # with pd.ExcelWriter("financial_statements.xlsx") as writer:
+    #     for stmt_type, statements in results.items():
+    #         for i, stmt in enumerate(statements):
+    #             if stmt.is_multi_page:
+    #                 sheet_name = f"{stmt_type.value[:15]}_p{stmt.page_numbers[0]}-{stmt.page_numbers[-1]}"
+    #             else:
+    #                 sheet_name = f"{stmt_type.value[:20]}_p{stmt.page_numbers[0]}"
+    #             stmt.dataframe.to_excel(writer, sheet_name=sheet_name, index=False)
+    
+    print("PDF Financial Statement Extractor with Multi-Page Support ready!")
+    print("\nFeatures:")
+    print("  ✓ Detects multi-page financial statements")
+    print("  ✓ Automatically merges continuation pages")
+    print("  ✓ Normalizes headers to 'Month Year - Month Year' format")
+    print("  ✓ Tracks page ranges for each statement")
+    print("\nWorkflow:")
+    print("  1. Extract statement type & headers")
+    print("  2. Normalize headers")
+    print("  3. Extract table data")
+    print("  4. Check next page for continuation")
+    print("  5. Merge if continuation, save if new statement")
