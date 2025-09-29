@@ -1,14 +1,26 @@
 """
-PDF Financial Statement Table Extractor using OpenAI GPT-4o and LangGraph
-Extracts tables from PDF pages with retry logic (max 3 attempts)
+PDF Financial Statement Table Extractor for 10-K SEC Filings
+Extracts Balance Sheet, Income Statement, and Cash Flow Statement from PDF files
+Uses OpenAI GPT-4o and LangGraph with retry logic (max 3 attempts per page)
 """
 
 import pandas as pd
 import base64
-from typing import TypedDict
+from typing import TypedDict, List, Dict, Optional
 from langgraph.graph import StateGraph, END
 from openai import OpenAI
+from pdf2image import convert_from_path
 import json
+import io
+from enum import Enum
+
+
+class StatementType(Enum):
+    """Enum for financial statement types"""
+    BALANCE_SHEET = "balance_sheet"
+    INCOME_STATEMENT = "income_statement"
+    CASH_FLOW = "cash_flow"
+    UNKNOWN = "unknown"
 
 
 class TableExtractionState(TypedDict):
@@ -17,51 +29,106 @@ class TableExtractionState(TypedDict):
     attempt: int
     table_data: dict | None
     dataframe: pd.DataFrame | None
+    statement_type: str
     error: str | None
     is_valid_table: bool
 
 
-class PDFTableExtractor:
+class FinancialStatement:
+    """Container for a financial statement with metadata"""
+    def __init__(self, dataframe: pd.DataFrame, statement_type: StatementType, 
+                 page_number: int, confidence: str = "high"):
+        self.dataframe = dataframe
+        self.statement_type = statement_type
+        self.page_number = page_number
+        self.confidence = confidence
+        
+    def __repr__(self):
+        return (f"FinancialStatement(type={self.statement_type.value}, "
+                f"page={self.page_number}, shape={self.dataframe.shape}, "
+                f"confidence={self.confidence})")
+
+
+class PDFFinancialStatementExtractor:
     """
-    A class to extract financial statement tables from PDF pages using 
-    OpenAI GPT-4o and LangGraph with retry logic (max 3 attempts)
+    Extracts Balance Sheet, Income Statement, and Cash Flow Statement 
+    from 10-K SEC filing PDFs using OpenAI GPT-4o and LangGraph
     """
     
-    def __init__(self, api_key: str, max_attempts: int = 3):
+    def __init__(self, api_key: str, max_attempts: int = 3, dpi: int = 200):
         """
-        Initialize the PDF Table Extractor
+        Initialize the PDF Financial Statement Extractor
         
         Args:
             api_key: OpenAI API key
-            max_attempts: Maximum number of extraction attempts (default: 3)
+            max_attempts: Maximum number of extraction attempts per page (default: 3)
+            dpi: DPI for PDF to image conversion (default: 200, higher = better quality)
         """
         self.client = OpenAI(api_key=api_key)
         self.max_attempts = max_attempts
+        self.dpi = dpi
         self.graph = None
         
-    @staticmethod
-    def encode_pdf_page_to_base64(file_path: str) -> str:
+    def convert_pdf_to_images(self, pdf_path: str, start_page: int = 1, 
+                             end_page: Optional[int] = None) -> List[str]:
         """
-        Convert an image file to base64 encoded string.
+        Convert PDF pages to base64 encoded images
         
         Args:
-            file_path: Path to the image file (JPEG, PNG, etc.)
+            pdf_path: Path to the PDF file
+            start_page: Starting page number (1-indexed)
+            end_page: Ending page number (inclusive). If None, converts all pages
             
         Returns:
-            Base64 encoded string of the image
-            
-        Note:
-            For PDF files, use pdf2image library first:
-            from pdf2image import convert_from_path
-            images = convert_from_path(pdf_path, first_page=1, last_page=1)
-            # Save image to temp file, then use this method
+            List of base64 encoded image strings
         """
-        with open(file_path, "rb") as f:
-            return base64.b64encode(f.read()).decode('utf-8')
+        print(f"Converting PDF pages {start_page} to {end_page or 'end'}...")
+        
+        images = convert_from_path(
+            pdf_path, 
+            first_page=start_page,
+            last_page=end_page,
+            dpi=self.dpi
+        )
+        
+        base64_images = []
+        for img in images:
+            img_bytes = io.BytesIO()
+            img.save(img_bytes, format='JPEG', quality=95)
+            img_base64 = base64.b64encode(img_bytes.getvalue()).decode('utf-8')
+            base64_images.append(img_base64)
+        
+        print(f"Converted {len(base64_images)} pages to images")
+        return base64_images
+    
+    def _identify_statement_type(self, table_data: dict) -> StatementType:
+        """
+        Identify the type of financial statement from the extracted table
+        
+        Args:
+            table_data: Dictionary containing extracted table and metadata
+            
+        Returns:
+            StatementType enum value
+        """
+        if not table_data or not table_data.get("has_table"):
+            return StatementType.UNKNOWN
+        
+        statement_type = table_data.get("statement_type", "").lower()
+        
+        if "balance" in statement_type or "balance_sheet" in statement_type:
+            return StatementType.BALANCE_SHEET
+        elif "income" in statement_type or "income_statement" in statement_type or \
+             "operations" in statement_type or "earnings" in statement_type:
+            return StatementType.INCOME_STATEMENT
+        elif "cash" in statement_type or "cash_flow" in statement_type:
+            return StatementType.CASH_FLOW
+        else:
+            return StatementType.UNKNOWN
     
     def _extract_table_with_gpt4o(self, state: TableExtractionState) -> TableExtractionState:
         """
-        Extract table from PDF page using GPT-4o vision
+        Extract table from PDF page using GPT-4o vision and identify statement type
         
         Args:
             state: Current state of the extraction process
@@ -70,49 +137,66 @@ class PDFTableExtractor:
             Updated state with extracted table data or error
         """
         attempt = state["attempt"] + 1
-        print(f"Attempt {attempt}: Extracting table from PDF...")
+        print(f"Attempt {attempt}: Extracting and classifying financial statement...")
         
         try:
             # Create the prompt based on attempt number
             if attempt == 1:
-                prompt = """Analyze this PDF page and extract any financial statement table you find.
-                
-                Return the data in JSON format with the following structure:
-                {
-                    "has_table": true/false,
-                    "table": {
-                        "headers": ["column1", "column2", ...],
-                        "rows": [
-                            ["value1", "value2", ...],
-                            ["value1", "value2", ...]
-                        ]
-                    }
-                }
-                
-                If there's no table, set "has_table" to false and "table" to null.
-                Ensure all rows have the same number of columns as headers.
-                Preserve numerical values exactly as they appear."""
+                prompt = """Analyze this PDF page from a 10-K SEC filing and:
+
+1. Identify if this page contains one of these financial statements:
+   - Balance Sheet (or Statement of Financial Position)
+   - Income Statement (or Statement of Operations/Earnings)
+   - Cash Flow Statement (or Statement of Cash Flows)
+
+2. If it contains one of these statements, extract the table data.
+
+Return the data in JSON format:
+{
+    "has_table": true/false,
+    "statement_type": "balance_sheet" | "income_statement" | "cash_flow" | "unknown",
+    "confidence": "high" | "medium" | "low",
+    "table": {
+        "headers": ["column1", "column2", ...],
+        "rows": [
+            ["value1", "value2", ...],
+            ["value1", "value2", ...]
+        ]
+    }
+}
+
+Guidelines:
+- If the page doesn't contain any of these 3 statements, set "has_table" to false
+- Look for key indicators like "Assets", "Liabilities", "Revenue", "Net Income", "Operating Activities"
+- Ensure all rows have the same number of columns as headers
+- Preserve numerical values and formatting (including parentheses for negatives)
+- For multi-year statements, include all year columns"""
             else:
-                prompt = f"""This is attempt {attempt} to extract a financial table from this PDF page.
-                Previous attempt had issues with the table structure.
-                
-                Please carefully extract the table ensuring:
-                1. All rows have exactly the same number of columns as headers
-                2. Numerical values are preserved accurately
-                3. Empty cells are represented as empty strings ""
-                4. Column headers are clear and descriptive
-                
-                Return in this exact JSON format:
-                {{
-                    "has_table": true/false,
-                    "table": {{
-                        "headers": ["column1", "column2", ...],
-                        "rows": [
-                            ["value1", "value2", ...],
-                            ["value1", "value2", ...]
-                        ]
-                    }}
-                }}"""
+                prompt = f"""This is attempt {attempt} to extract a financial statement from a 10-K filing.
+Previous attempt had issues. Please carefully:
+
+1. Identify the statement type (Balance Sheet, Income Statement, or Cash Flow Statement)
+2. Extract the complete table with proper structure
+
+Return in this exact JSON format:
+{{
+    "has_table": true/false,
+    "statement_type": "balance_sheet" | "income_statement" | "cash_flow" | "unknown",
+    "confidence": "high" | "medium" | "low",
+    "table": {{
+        "headers": ["column1", "column2", ...],
+        "rows": [
+            ["value1", "value2", ...],
+            ["value1", "value2", ...]
+        ]
+    }}
+}}
+
+Ensure:
+- All rows have exactly the same number of columns as headers
+- Numerical values are preserved accurately (including negatives in parentheses)
+- Empty cells are represented as empty strings ""
+- Column headers clearly indicate the time period/year"""
             
             response = self.client.chat.completions.create(
                 model="gpt-4o",
@@ -145,10 +229,14 @@ class PDFTableExtractor:
             
             table_data = json.loads(content)
             
+            # Identify statement type
+            statement_type = self._identify_statement_type(table_data)
+            
             return {
                 **state,
                 "attempt": attempt,
                 "table_data": table_data,
+                "statement_type": statement_type.value,
                 "error": None
             }
             
@@ -158,7 +246,8 @@ class PDFTableExtractor:
                 **state,
                 "attempt": attempt,
                 "error": str(e),
-                "table_data": None
+                "table_data": None,
+                "statement_type": StatementType.UNKNOWN.value
             }
     
     def _convert_to_dataframe(self, state: TableExtractionState) -> TableExtractionState:
@@ -178,11 +267,22 @@ class PDFTableExtractor:
             
             # Check if table exists
             if not table_data or not table_data.get("has_table"):
-                print("No table found in the PDF page")
+                print("No relevant financial statement found on this page")
                 return {
                     **state,
                     "dataframe": pd.DataFrame(),
-                    "is_valid_table": True,  # Empty is valid
+                    "is_valid_table": True,  # Empty is valid (not a target statement)
+                    "error": None
+                }
+            
+            # Check if it's one of the target statement types
+            statement_type = state.get("statement_type", "unknown")
+            if statement_type == StatementType.UNKNOWN.value:
+                print("Table found but not a target financial statement")
+                return {
+                    **state,
+                    "dataframe": pd.DataFrame(),
+                    "is_valid_table": True,  # Not a target statement
                     "error": None
                 }
             
@@ -211,7 +311,7 @@ class PDFTableExtractor:
             if df.empty or (df.shape[0] == 0):
                 raise ValueError("DataFrame is empty")
             
-            print(f"Successfully created DataFrame with shape {df.shape}")
+            print(f"Successfully created DataFrame with shape {df.shape} for {statement_type}")
             
             return {
                 **state,
@@ -239,7 +339,7 @@ class PDFTableExtractor:
         Returns:
             String indicating next action: "end", "retry", or "max_attempts"
         """
-        # If valid table, we're done
+        # If valid table (or no target statement found), we're done
         if state["is_valid_table"] and state["dataframe"] is not None:
             return "end"
         
@@ -251,7 +351,7 @@ class PDFTableExtractor:
         
         # If we've reached max attempts, return empty dataframe
         if state["attempt"] >= self.max_attempts:
-            print(f"Max attempts ({self.max_attempts}) reached. Returning empty DataFrame.")
+            print(f"Max attempts ({self.max_attempts}) reached. Moving to next page.")
             return "max_attempts"
         
         # Otherwise, retry
@@ -272,7 +372,7 @@ class PDFTableExtractor:
             **state,
             "dataframe": pd.DataFrame(),
             "is_valid_table": True,
-            "error": f"Max attempts ({self.max_attempts}) reached - returning empty DataFrame"
+            "error": f"Max attempts ({self.max_attempts}) reached - moving to next page"
         }
     
     def _create_extraction_graph(self) -> StateGraph:
@@ -311,24 +411,15 @@ class PDFTableExtractor:
         
         return workflow.compile()
     
-    def extract_table(self, pdf_page_image_base64: str) -> pd.DataFrame:
+    def extract_from_page(self, pdf_page_image_base64: str) -> tuple[pd.DataFrame, StatementType, str]:
         """
-        Extract financial table from PDF page (main public method)
+        Extract financial statement from a single PDF page
         
         Args:
             pdf_page_image_base64: Base64 encoded PDF page image
             
         Returns:
-            pd.DataFrame: Extracted table or empty DataFrame if:
-                - No table found in PDF
-                - Extraction failed after max attempts
-                - Invalid table structure
-        
-        Example:
-            >>> extractor = PDFTableExtractor(api_key="sk-...")
-            >>> image_base64 = PDFTableExtractor.encode_pdf_page_to_base64("page.jpg")
-            >>> df = extractor.extract_table(image_base64)
-            >>> print(df.head())
+            Tuple of (DataFrame, StatementType, confidence)
         """
         # Create the graph if not already created
         if self.graph is None:
@@ -340,6 +431,7 @@ class PDFTableExtractor:
             "attempt": 0,
             "table_data": None,
             "dataframe": None,
+            "statement_type": StatementType.UNKNOWN.value,
             "error": None,
             "is_valid_table": False
         }
@@ -347,60 +439,164 @@ class PDFTableExtractor:
         # Run the graph
         final_state = self.graph.invoke(initial_state)
         
-        # Return the DataFrame
-        return final_state["dataframe"]
+        # Get statement type
+        statement_type_str = final_state.get("statement_type", StatementType.UNKNOWN.value)
+        statement_type = StatementType(statement_type_str)
+        
+        # Get confidence
+        confidence = "unknown"
+        if final_state.get("table_data"):
+            confidence = final_state["table_data"].get("confidence", "unknown")
+        
+        return final_state["dataframe"], statement_type, confidence
     
-    def extract_financial_table_from_pdf(self, pdf_page_image_base64: str) -> pd.DataFrame:
+    def extract_from_pdf(self, pdf_path: str, start_page: int = 1, 
+                        end_page: Optional[int] = None) -> Dict[StatementType, List[FinancialStatement]]:
         """
-        Alias for extract_table method for backward compatibility
+        Extract all financial statements from a 10-K PDF file
         
         Args:
-            pdf_page_image_base64: Base64 encoded PDF page image
+            pdf_path: Path to the PDF file
+            start_page: Starting page number (1-indexed, default: 1)
+            end_page: Ending page number (inclusive). If None, processes all pages
             
         Returns:
-            pd.DataFrame: Extracted table or empty DataFrame
+            Dictionary mapping StatementType to list of FinancialStatement objects
+            
+        Example:
+            >>> extractor = PDFFinancialStatementExtractor(api_key="sk-...")
+            >>> results = extractor.extract_from_pdf("10k_filing.pdf")
+            >>> 
+            >>> # Access balance sheets
+            >>> for stmt in results[StatementType.BALANCE_SHEET]:
+            >>>     print(f"Page {stmt.page_number}:")
+            >>>     print(stmt.dataframe.head())
         """
-        return self.extract_table(pdf_page_image_base64)
+        print(f"\n{'='*60}")
+        print(f"Processing 10-K PDF: {pdf_path}")
+        print(f"{'='*60}\n")
+        
+        # Convert PDF to images
+        page_images = self.convert_pdf_to_images(pdf_path, start_page, end_page)
+        
+        # Initialize results dictionary
+        results = {
+            StatementType.BALANCE_SHEET: [],
+            StatementType.INCOME_STATEMENT: [],
+            StatementType.CASH_FLOW: []
+        }
+        
+        # Process each page
+        actual_start = start_page
+        for i, page_image in enumerate(page_images):
+            page_num = actual_start + i
+            print(f"\n--- Processing Page {page_num} ---")
+            
+            df, statement_type, confidence = self.extract_from_page(page_image)
+            
+            if not df.empty and statement_type != StatementType.UNKNOWN:
+                financial_stmt = FinancialStatement(df, statement_type, page_num, confidence)
+                results[statement_type].append(financial_stmt)
+                print(f"✓ Found {statement_type.value} on page {page_num} (confidence: {confidence})")
+            else:
+                print(f"✗ No target financial statement found on page {page_num}")
+        
+        # Print summary
+        print(f"\n{'='*60}")
+        print("EXTRACTION SUMMARY")
+        print(f"{'='*60}")
+        print(f"Balance Sheets found: {len(results[StatementType.BALANCE_SHEET])}")
+        print(f"Income Statements found: {len(results[StatementType.INCOME_STATEMENT])}")
+        print(f"Cash Flow Statements found: {len(results[StatementType.CASH_FLOW])}")
+        print(f"{'='*60}\n")
+        
+        return results
 
 
 # Example usage
 if __name__ == "__main__":
     # Initialize the extractor
-    extractor = PDFTableExtractor(api_key="your-api-key-here", max_attempts=3)
+    extractor = PDFFinancialStatementExtractor(
+        api_key="your-api-key-here",
+        max_attempts=3,
+        dpi=200  # Higher DPI = better quality but slower
+    )
     
-    # Example 1: Using with an image file
-    # pdf_page_base64 = PDFTableExtractor.encode_pdf_page_to_base64("path/to/pdf_page.jpg")
-    # df = extractor.extract_table(pdf_page_base64)
-    # print(df)
+    # Example 1: Extract from entire PDF
+    # results = extractor.extract_from_pdf("10k_filing.pdf")
     
-    # Example 2: Using with pdf2image
-    # from pdf2image import convert_from_path
-    # import io
+    # Example 2: Extract from specific page range (e.g., pages 30-50)
+    # results = extractor.extract_from_pdf("10k_filing.pdf", start_page=30, end_page=50)
+    
+    # Example 3: Access extracted statements
+    # # Get all balance sheets
+    # for stmt in results[StatementType.BALANCE_SHEET]:
+    #     print(f"\nBalance Sheet from Page {stmt.page_number}:")
+    #     print(f"Confidence: {stmt.confidence}")
+    #     print(f"Shape: {stmt.dataframe.shape}")
+    #     print(stmt.dataframe.head())
     # 
-    # images = convert_from_path("financial_statement.pdf", first_page=1, last_page=1)
-    # image_bytes = io.BytesIO()
-    # images[0].save(image_bytes, format='JPEG')
-    # pdf_page_base64 = base64.b64encode(image_bytes.getvalue()).decode('utf-8')
+    # # Get all income statements
+    # for stmt in results[StatementType.INCOME_STATEMENT]:
+    #     print(f"\nIncome Statement from Page {stmt.page_number}:")
+    #     print(stmt.dataframe.head())
     # 
-    # df = extractor.extract_table(pdf_page_base64)
-    # print(df)
+    # # Get all cash flow statements
+    # for stmt in results[StatementType.CASH_FLOW]:
+    #     print(f"\nCash Flow Statement from Page {stmt.page_number}:")
+    #     print(stmt.dataframe.head())
     
-    # Example 3: Process multiple pages
-    # for page_num in range(1, 6):
-    #     images = convert_from_path("report.pdf", first_page=page_num, last_page=page_num)
-    #     image_bytes = io.BytesIO()
-    #     images[0].save(image_bytes, format='JPEG')
-    #     page_base64 = base64.b64encode(image_bytes.getvalue()).decode('utf-8')
-    #     
-    #     df = extractor.extract_table(page_base64)
-    #     if not df.empty:
-    #         print(f"Page {page_num}: Found table with {len(df)} rows")
-    #         print(df.head())
+    # Example 4: Export to Excel
+    # with pd.ExcelWriter("financial_statements.xlsx") as writer:
+    #     for stmt_type, statements in results.items():
+    #         for i, stmt in enumerate(statements):
+    #             sheet_name = f"{stmt_type.value[:20]}_p{stmt.page_number}"
+    #             stmt.dataframe.to_excel(writer, sheet_name=sheet_name, index=False)
     
-    print("PDF Financial Table Extractor ready!")
+    print("PDF Financial Statement Extractor for 10-K Filings ready!")
     print("\nUsage:")
-    print("  extractor = PDFTableExtractor(api_key='your-key', max_attempts=3)")
-    print("  image_base64 = PDFTableExtractor.encode_pdf_page_to_base64('page.jpg')")
-    print("  df = extractor.extract_table(image_base64)")
-    print("\nOr use the alias method:")
-    print("  df = extractor.extract_financial_table_from_pdf(image_base64)
+    print("  extractor = PDFFinancialStatementExtractor(api_key='your-key')")
+    print("  results = extractor.extract_from_pdf('10k_filing.pdf')")
+    print("  ")
+    print("  # Access statements by type:")
+    print("  for stmt in results[StatementType.BALANCE_SHEET]:")
+    print("      print(stmt.dataframe)")
+
+
+def UsageExample():
+    # Initialize
+    extractor = PDFFinancialStatementExtractor(
+        api_key="sk-...",
+        max_attempts=3,
+        dpi=200
+    )
+    
+    # Extract from entire 10-K
+    results = extractor.extract_from_pdf("apple_10k.pdf")
+    
+    # Or extract from specific pages (if you know where statements are)
+    results = extractor.extract_from_pdf("apple_10k.pdf", start_page=30, end_page=50)
+    
+    # Access Balance Sheets
+    for stmt in results[StatementType.BALANCE_SHEET]:
+        print(f"Page {stmt.page_number}, Confidence: {stmt.confidence}")
+        print(stmt.dataframe)
+    
+    # Access Income Statements
+    for stmt in results[StatementType.INCOME_STATEMENT]:
+        print(stmt.dataframe)
+    
+    # Export all to Excel
+    with pd.ExcelWriter("financial_statements.xlsx") as writer:
+        for stmt_type, statements in results.items():
+            for stmt in statements:
+                sheet_name = f"{stmt_type.value}_page_{stmt.page_number}"
+                stmt.dataframe.to_excel(writer, sheet_name=sheet_name)
+
+"""
+{
+    StatementType.BALANCE_SHEET: [FinancialStatement(...), ...],
+    StatementType.INCOME_STATEMENT: [FinancialStatement(...), ...],
+    StatementType.CASH_FLOW: [FinancialStatement(...), ...]
+}
+"""
