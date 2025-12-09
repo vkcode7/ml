@@ -192,6 +192,64 @@ This is like mini matrix multiplication for two lists of numbers.
 ✔ Used to measure how similar two things are.
 
 
+## Element-wise Multiplication in Matrices - Hadamard product
+Element-wise multiplication (also called the Hadamard product) multiplies corresponding elements in two matrices of the same shape.
+Basic Example:
+python
+```
+import numpy as np
+
+A = np.array([[1, 2, 3],
+              [4, 5, 6]])
+
+B = np.array([[2, 3, 4],
+              [5, 6, 7]])
+```
+### Element-wise multiplication using *
+```
+result = A * B
+
+print("A:\n", A)
+print("\nB:\n", B)
+print("\nA * B:\n", result)
+```
+
+**Output:**
+```
+A * B:
+[[ 2,  6, 12],    # [1*2, 2*3, 3*4]
+ [20, 30, 42]]    # [4*5, 5*6, 6*7]
+```
+
+## Visual Explanation:
+```
+     [1  2  3]       [2  3  4]       [1×2  2×3  3×4]       [2   6  12]
+A =  [4  5  6]   B = [5  6  7]   →   [4×5  5×6  6×7]   =   [20  30 42]
+     
+     Position (0,0): 1 × 2 = 2
+     Position (0,1): 2 × 3 = 6
+     Position (0,2): 3 × 4 = 12
+     And so on...
+```
+
+### Key Takeaway:
+```text
+Element-wise multiplication (*):
+
+✓ Multiplies corresponding positions
+✓ Requires same shape (or broadcasting)
+✓ Used for: activations, gradients, masking
+
+Matrix multiplication (@):
+
+✓ Computes weighted sums
+✓ Requires inner dimensions to match
+✓ Used for: layer transformations, projections
+```
+In neural networks, you use both: matrix multiplication to transform data between layers, and element-wise multiplication to apply activations and compute gradients! 🎯
+
+
+
 # What This Example Shows:
 🎯 Problem: Learning the XOR function (a classic non-linear problem)
 📋 Complete Walkthrough:
