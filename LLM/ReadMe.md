@@ -86,14 +86,40 @@ Then it mixes the values based on those scores. Boom—each word now "knows" abo
 
 They made it even better with multi-head attention: Like having 8 pairs of eyes looking at the sentence from different angles (one might focus on grammar, another on meaning).
 ```
-<img src="https://sebastianraschka.com/images/blog/2023/self-attention-from-scratch/summary.png">
+<img src="https://sebastianraschka.com/images/blog/2023/self-attention-from-scratch/summary.png" width="60%" heigh="60%">
 
-<img src="https://sebastianraschka.com/images/blog/2023/self-attention-from-scratch/multi-head.png">
+<img src="https://sebastianraschka.com/images/blog/2023/self-attention-from-scratch/multi-head.png" width="60%" heigh="60%">
 
 
 ### The New Invention: The Transformer
 
-<img src="https://towardsdatascience.com/wp-content/uploads/2022/09/1nqEy4i4sQPhYV0E2n436fQ.png">
+<img src="https://towardsdatascience.com/wp-content/uploads/2022/09/1nqEy4i4sQPhYV0E2n436fQ.png" width="60%" heigh="60%">
+
+Dot Product:
+
+For two vectors $\mathbf{a}$ and $\mathbf{b}$ in $n$-dimensional space:
+
+
+$$\mathbf{a} = [a_1, a_2, \dots, a_n], \quad \mathbf{b} = [b_1, b_2, \dots, b_n]$$
+
+$\mathbf{a} \cdot \mathbf{b} = a_1 b_1 + a_2 b_2 + \dots + a_n b_n = \sum_{i=1}^n a_i b_i$
+
+Alternative geometric definition (in 2D or 3D):
+
+$$\mathbf{a} \cdot \mathbf{b} = \|\mathbf{a}\| \|\mathbf{b}\| \cos \theta$$
+
+where:
+
+$\|\mathbf{a}\|$ and $\|\mathbf{b}\|$ are the magnitudes (lengths) of the vectors,
+$\theta$ is the angle between them.
+
+This shows:
+```text
+If vectors point in the same direction ($\theta = 0^\circ$), dot product is maximum (positive).
+If perpendicular ($\theta = 90^\circ$), dot product = 0.
+If opposite directions ($\theta = 180^\circ$), dot product is negative and minimum.
+```
+```
 
 ```text
 They built a whole new AI called the Transformer. It has two main parts:
@@ -115,3 +141,31 @@ This Transformer is the heart of today's huge AIs. Models like GPT are basically
 Cool, right?
 ```
 
+## Understanding Positional Encoders in LLMs
+```text
+Imagine you're reading a sentence, but someone hands you all the words on separate cards in a random pile. You'd have a hard time understanding the meaning, right?
+"ate cat the mouse the"
+vs.
+"the cat ate the mouse"
+Same words, totally different meanings!
+The Problem
+This is exactly the problem that language models like ChatGPT face. Unlike humans who read words in order, these AI models look at ALL the words in a sentence at the same time (this makes them super fast). But this creates a problem: how does the model know which word came first, second, third, etc.?
+The Solution: Positional Encoders
+A positional encoder is like a numbering system that tags each word with its position. Think of it like adding timestamps to a video:
+
+Word 1: "the" → gets tag #1
+Word 2: "cat" → gets tag #2
+Word 3: "ate" → gets tag #3
+Word 4: "the" → gets tag #4
+Word 5: "mouse" → gets tag #5
+
+But instead of simple numbers, the model uses special mathematical patterns (like wave patterns) that help it understand not just "this word is position 3" but also "this word is near position 2 and 4."
+Real-World Analogy
+It's like organizing your Spotify playlist. The songs have:
+
+Their own identity (the actual song/word)
+Their position in the playlist (1st, 2nd, 3rd)
+
+Both pieces of information matter! A love song hits different if it's the opening track versus the closing track.
+That's essentially what positional encoders do—they make sure the AI knows word order matters!
+```
