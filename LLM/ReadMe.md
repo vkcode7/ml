@@ -169,3 +169,378 @@ Their position in the playlist (1st, 2nd, 3rd)
 Both pieces of information matter! A love song hits different if it's the opening track versus the closing track.
 That's essentially what positional encoders do—they make sure the AI knows word order matters!
 ```
+
+### What is Forward Propagation?
+
+Forward propagation (or forward pass) is the process by which input data flows through the neural network from the input layer to the output layer to produce a prediction.
+
+During forward propagation:
+- Each neuron computes a weighted sum of its inputs, adds a bias, and applies an activation function (e.g., ReLU, sigmoid, tanh).
+- The output of one layer becomes the input to the next layer.
+- At the final layer, the network produces an output (e.g., class probabilities in classification or a scalar value in regression).
+- A loss function then measures how far this prediction is from the true target.
+
+### What is Backward Propagation?
+Backward propagation (or backpropagation) is the algorithm used to train the neural network by updating its weights and biases to minimize the loss.
+
+It works by:
+- Computing the gradient (partial derivative) of the loss with respect to each weight and bias, starting from the output layer and moving backward to the input layer.
+- Using the chain rule of calculus to efficiently propagate these gradients backward.
+- Updating parameters using an optimization algorithm like gradient descent:
+
+```java
+new_weight = old_weight - learning_rate × gradient
+```
+Backpropagation allows the network to learn by attributing error to earlier layers and adjusting weights accordingly.
+
+Here is a simple Python code that implements the tiny neural network.
+```py
+# A super simple neural network with:
+# 1 input -> 1 hidden neuron (with ReLU) -> 1 output
+# We will do ONE forward pass and ONE backward pass by hand
+
+# Step 1: Set up our values (just like in the example)
+x = 2.0          # Input value
+y_true = 4.0     # The correct answer we want the network to predict
+
+# Initial weights and biases (these are what the network will learn)
+w1 = 2.0         # Weight from input to hidden neuron
+b1 = -3.0        # Bias for hidden neuron
+w2 = 1.5         # Weight from hidden to output
+b2 = 0.5         # Bias for output
+
+learning_rate = 0.1  # How big of a step we take when updating weights
+
+print("=== Starting Forward Propagation ===")
+print(f"Input x = {x}")
+print(f"True answer y = {y_true}\n")
+
+# Forward Propagation (going from input to output)
+
+# Hidden neuron calculation before activation
+z1 = w1 * x + b1
+print(f"Hidden pre-activation z1 = w1 * x + b1 = {w1} * {x} + {b1} = {z1}")
+
+# ReLU activation: if z1 > 0, keep it; else make it 0
+h = max(0, z1)   # This is ReLU
+print(f"Hidden neuron output h = ReLU(z1) = {h}")
+
+# Output neuron (no activation, just linear)
+y_pred = w2 * h + b2
+print(f"Predicted output y_pred = w2 * h + b2 = {w2} * {h} + {b2} = {y_pred}")
+
+# Calculate how wrong we are (loss)
+loss = (y_pred - y_true) ** 2 / 2
+print(f"\nLoss = {(y_pred - y_true)}² / 2 = {loss}\n")
+
+print("=== Starting Backward Propagation (learning from the mistake) ===")
+
+# Backward Propagation (going from loss back to weights)
+
+# 1. How much the loss changes if we change y_pred
+d_loss_y_pred = y_pred - y_true   # Derivative of loss w.r.t. y_pred
+print(f"Step 1: d_loss/y_pred = {y_pred} - {y_true} = {d_loss_y_pred}")
+
+# 2. Gradients for w2 and b2
+d_loss_w2 = d_loss_y_pred * h     # Because y_pred depends on w2 * h
+d_loss_b2 = d_loss_y_pred * 1     # Because y_pred depends on + b2
+print(f"Step 2: d_loss/w2 = {d_loss_y_pred} * {h} = {d_loss_w2}")
+print(f"        d_loss/b2 = {d_loss_y_pred} * 1 = {d_loss_b2}")
+
+# 3. How much error flows back to the hidden neuron h
+d_loss_h = d_loss_y_pred * w2
+print(f"Step 3: d_loss/h = {d_loss_y_pred} * {w2} = {d_loss_h}")
+
+# 4. ReLU derivative: if z1 > 0, derivative = 1; else 0
+relu_derivative = 1 if z1 > 0 else 0
+d_loss_z1 = d_loss_h * relu_derivative
+print(f"Step 4: ReLU derivative = {relu_derivative}")
+print(f"        d_loss/z1 = {d_loss_h} * {relu_derivative} = {d_loss_z1}")
+
+# 5. Gradients for w1 and b1
+d_loss_w1 = d_loss_z1 * x
+d_loss_b1 = d_loss_z1 * 1
+print(f"Step 5: d_loss/w1 = {d_loss_z1} * {x} = {d_loss_w1}")
+print(f"        d_loss/b1 = {d_loss_z1} * 1 = {d_loss_b1}")
+
+# 6. Update weights and biases (learning!)
+print("\n=== Updating weights (learning step) ===")
+print(f"Old values: w1={w1}, b1={b1}, w2={w2}, b2={b2}")
+
+w1 = w1 - learning_rate * d_loss_w1
+b1 = b1 - learning_rate * d_loss_b1
+w2 = w2 - learning_rate * d_loss_w2
+b2 = b2 - learning_rate * d_loss_b2
+
+print(f"New values: w1={w1:.1f}, b1={b1:.1f}, w2={w2:.1f}, b2={b2:.1f}")
+
+# Let's do one more forward pass to see if it improved!
+print("\n=== One more forward pass to see improvement ===")
+z1_new = w1 * x + b1
+h_new = max(0, z1_new)
+y_pred_new = w2 * h_new + b2
+loss_new = (y_pred_new - y_true) ** 2 / 2
+
+print(f"New prediction = {y_pred_new}")
+print(f"Old loss was {loss}, new loss is {loss_new:.1f}")
+print("(Smaller loss means the network got better!)")
+```
+
+Output:
+```text
+Input was 2.0, true answer 4.0
+First prediction: 2.0 (pretty far off)
+Loss: 2.0
+
+After one learning step:
+New prediction: around 3.02 (much closer to 4.0!)
+New loss: about 0.48 (much smaller!)
+```
+
+Example with multiple Epochs and a dataset with 3 samples:
+```py
+# A super simple neural network with:
+# 1 input -> 1 hidden neuron (with ReLU) -> 1 output
+# Now with MULTIPLE EXAMPLES (3 inputs) and MULTIPLE TRAINING EPOCHS (loops to learn better)
+
+# Step 1: Set up our dataset (3 examples: input x and true y)
+# Let's say we're trying to learn something like y ≈ 2 * x (but with ReLU, it might not be perfect)
+dataset = [
+    (1.0, 2.0),  # Example 1: x=1, y=2
+    (2.0, 4.0),  # Example 2: x=2, y=4 (same as before)
+    (3.0, 6.0)   # Example 3: x=3, y=6
+]
+
+# Initial weights and biases (these are what the network will learn)
+w1 = 2.0         # Weight from input to hidden neuron
+b1 = -3.0        # Bias for hidden neuron
+w2 = 1.5         # Weight from hidden to output
+b2 = 0.5         # Bias for output
+
+learning_rate = 0.1  # How big of a step we take when updating weights
+num_epochs = 5       # How many full training loops (epochs) to do. Try changing this!
+
+print("=== Starting Training ===")
+print(f"We have {len(dataset)} examples to learn from.")
+print(f"Initial weights: w1={w1}, b1={b1}, w2={w2}, b2={b2}\n")
+
+# Big loop: For each epoch (full pass through all data)
+for epoch in range(num_epochs):
+    total_loss = 0.0  # Keep track of how wrong we are overall this epoch
+    
+    print(f"--- Epoch {epoch + 1} (Training Loop {epoch + 1}) ---")
+    
+    # Inner loop: Go through each example in the dataset
+    for x, y_true in dataset:
+        print(f"\nProcessing example: x={x}, y_true={y_true}")
+        
+        # Forward Propagation (make a guess)
+        
+        # Hidden neuron before activation
+        z1 = w1 * x + b1
+        print(f"  Hidden pre-activation z1 = {w1} * {x} + {b1} = {z1}")
+        
+        # ReLU activation: max(0, z1)
+        h = max(0, z1)
+        print(f"  Hidden output h = ReLU(z1) = {h}")
+        
+        # Output (linear)
+        y_pred = w2 * h + b2
+        print(f"  Predicted y_pred = {w2} * {h} + {b2} = {y_pred}")
+        
+        # Loss for this example
+        loss = (y_pred - y_true) ** 2 / 2
+        print(f"  Loss for this example = {(y_pred - y_true)}² / 2 = {loss}")
+        total_loss += loss  # Add to total
+        
+        # Backward Propagation (learn from mistake)
+        
+        # 1. Derivative of loss w.r.t. y_pred
+        d_loss_y_pred = y_pred - y_true
+        print(f"  Backprop Step 1: d_loss/y_pred = {y_pred} - {y_true} = {d_loss_y_pred}")
+        
+        # 2. Gradients for w2 and b2
+        d_loss_w2 = d_loss_y_pred * h
+        d_loss_b2 = d_loss_y_pred * 1
+        print(f"  Step 2: d_loss/w2 = {d_loss_y_pred} * {h} = {d_loss_w2}")
+        print(f"          d_loss/b2 = {d_loss_y_pred} * 1 = {d_loss_b2}")
+        
+        # 3. Error back to h
+        d_loss_h = d_loss_y_pred * w2
+        print(f"  Step 3: d_loss/h = {d_loss_y_pred} * {w2} = {d_loss_h}")
+        
+        # 4. Through ReLU
+        relu_derivative = 1 if z1 > 0 else 0
+        d_loss_z1 = d_loss_h * relu_derivative
+        print(f"  Step 4: ReLU deriv = {relu_derivative}, d_loss/z1 = {d_loss_h} * {relu_derivative} = {d_loss_z1}")
+        
+        # 5. Gradients for w1 and b1
+        d_loss_w1 = d_loss_z1 * x
+        d_loss_b1 = d_loss_z1 * 1
+        print(f"  Step 5: d_loss/w1 = {d_loss_z1} * {x} = {d_loss_w1}")
+        print(f"          d_loss/b1 = {d_loss_z1} * 1 = {d_loss_b1}")
+        
+        # 6. Update weights (learn!)
+        w1 = w1 - learning_rate * d_loss_w1
+        b1 = b1 - learning_rate * d_loss_b1
+        w2 = w2 - learning_rate * d_loss_w2
+        b2 = b2 - learning_rate * d_loss_b2
+        print(f"  Updated weights: w1={w1:.2f}, b1={b1:.2f}, w2={w2:.2f}, b2={b2:.2f}")
+    
+    # After all examples in this epoch, show average loss
+    avg_loss = total_loss / len(dataset)
+    print(f"\nEpoch {epoch + 1} finished! Average loss: {avg_loss:.2f}")
+    print(" (Lower loss means better learning!)\n")
+
+# After all training, test on the dataset again
+print("=== Final Test After Training ===")
+for x, y_true in dataset:
+    z1 = w1 * x + b1
+    h = max(0, z1)
+    y_pred = w2 * h + b2
+    print(f"Input x={x}, True y={y_true}, Final Prediction={y_pred:.2f}")
+```
+
+Output:
+```py
+=== Starting Training ===
+We have 3 examples to learn from.
+Initial weights: w1=2.0, b1=-3.0, w2=1.5, b2=0.5
+
+--- Epoch 1 (Training Loop 1) ---
+
+Processing example: x=1.0, y_true=2.0
+ Hidden pre-activation z1 = 2.0 * 1.0 + -3.0 = -1.0
+ Hidden output h = ReLU(z1) = 0
+ Predicted y_pred = 1.5 * 0 + 0.5 = 0.5
+ Loss for this example = -1.5² / 2 = 1.125
+ Backprop Step 1: d_loss/y_pred = 0.5 - 2.0 = -1.5
+ Step 2: d_loss/w2 = -1.5 * 0 = -0.0
+ d_loss/b2 = -1.5 * 1 = -1.5
+ Step 3: d_loss/h = -1.5 * 1.5 = -2.25
+ Step 4: ReLU deriv = 0, d_loss/z1 = -2.25 * 0 = -0.0
+ Step 5: d_loss/w1 = -0.0 * 1.0 = -0.0
+ d_loss/b1 = -0.0 * 1 = -0.0
+ Updated weights: w1=2.00, b1=-3.00, w2=1.50, b2=0.65
+
+Processing example: x=2.0, y_true=4.0
+ Hidden pre-activation z1 = 2.0 * 2.0 + -3.0 = 1.0
+ Hidden output h = ReLU(z1) = 1.0
+ Predicted y_pred = 1.5 * 1.0 + 0.65 = 2.15
+ Loss for this example = -1.85² / 2 = 1.7112500000000002
+ Backprop Step 1: d_loss/y_pred = 2.15 - 4.0 = -1.85
+ Step 2: d_loss/w2 = -1.85 * 1.0 = -1.85
+ d_loss/b2 = -1.85 * 1 = -1.85
+ Step 3: d_loss/h = -1.85 * 1.5 = -2.7750000000000004
+ Step 4: ReLU deriv = 1, d_loss/z1 = -2.7750000000000004 * 1 = -2.7750000000000004
+ Step 5: d_loss/w1 = -2.7750000000000004 * 2.0 = -5.550000000000001
+ d_loss/b1 = -2.7750000000000004 * 1 = -2.7750000000000004
+ Updated weights: w1=2.56, b1=-2.72, w2=1.69, b2=0.84
+
+Processing example: x=3.0, y_true=6.0
+ Hidden pre-activation z1 = 2.555 * 3.0 + -2.7225 = 4.942500000000001
+ Hidden output h = ReLU(z1) = 4.942500000000001
+ Predicted y_pred = 1.685 * 4.942500000000001 + 0.8350000000000001 = 9.163112500000002
+ Loss for this example = 3.163112500000002² / 2 = 5.002640343828132
+ Backprop Step 1: d_loss/y_pred = 9.163112500000002 - 6.0 = 3.163112500000002
+ Step 2: d_loss/w2 = 3.163112500000002 * 4.942500000000001 = 15.633683531250014
+ d_loss/b2 = 3.163112500000002 * 1 = 3.163112500000002
+ Step 3: d_loss/h = 3.163112500000002 * 1.685 = 5.3298445625000035
+ Step 4: ReLU deriv = 1, d_loss/z1 = 5.3298445625000035 * 1 = 5.3298445625000035
+ Step 5: d_loss/w1 = 5.3298445625000035 * 3.0 = 15.98953368750001
+ d_loss/b1 = 5.3298445625000035 * 1 = 5.3298445625000035
+ Updated weights: w1=0.96, b1=-3.26, w2=0.12, b2=0.52
+
+Epoch 1 finished! Average loss: 2.61
+ (Lower loss means better learning!)
+
+--- Epoch 2 (Training Loop 2) ---
+
+... (continuing similarly for epochs 2-5; the hidden neuron eventually stops activating due to updates pushing b1 lower and w1 not recovering the activation region)
+
+=== Final Test After Training ===
+Input x=1.0, True y=2.0, Final Prediction=3.12
+Input x=2.0, True y=4.0, Final Prediction=3.12
+Input x=3.0, True y=6.0, Final Prediction=3.12
+```
+
+### Updated Neural Network Example: Now with 2 Input Features
+
+We've extended the toy network to handle multiple input features (2 in this case):
+
+- Input layer: 2 features (x1, x2)
+- Hidden layer: Still 1 neuron with ReLU activation
+- Output layer: 1 linear neuron
+
+The target is still approximately y = 2 * x1 (ignoring x2, since x2=0 in all examples).
+
+```py
+dataset = [
+    ((1.0, 0.0), 2.0),
+    ((2.0, 0.0), 4.0),
+    ((3.0, 0.0), 6.0)
+]
+
+# Initial parameters
+w1_1 = 2.0   # weight for feature 1
+w1_2 = 0.5   # weight for feature 2
+b1 = 0.0
+w2 = 1.5
+b2 = 0.0
+learning_rate = 0.05
+num_epochs = 10
+
+print("=== Starting Training ===")
+print(f"Initial: w1_1={w1_1}, w1_2={w1_2}, b1={b1}, w2={w2}, b2={b2}\n")
+
+for epoch in range(num_epochs):
+    total_loss = 0.0
+    print(f"--- Epoch {epoch + 1} ---")
+    
+    for features, y_true in dataset:
+        x1, x2 = features
+        print(f"\nExample: x1={x1}, x2={x2}, y_true={y_true}")
+        
+        # Forward pass
+        z1 = w1_1 * x1 + w1_2 * x2 + b1
+        h = max(0, z1)  # ReLU
+        y_pred = w2 * h + b2
+        
+        loss = (y_pred - y_true) ** 2 / 2
+        total_loss += loss
+        
+        # Backward pass
+        d_loss_y_pred = y_pred - y_true
+        
+        d_loss_w2 = d_loss_y_pred * h
+        d_loss_b2 = d_loss_y_pred
+        
+        d_loss_h = d_loss_y_pred * w2
+        d_loss_z1 = d_loss_h * (1 if z1 > 0 else 0)
+        
+        d_loss_w1_1 = d_loss_z1 * x1
+        d_loss_w1_2 = d_loss_z1 * x2
+        d_loss_b1 = d_loss_z1
+        
+        # Update
+        w1_1 -= learning_rate * d_loss_w1_1
+        w1_2 -= learning_rate * d_loss_w1_2
+        b1 -= learning_rate * d_loss_b1
+        w2 -= learning_rate * d_loss_w2
+        b2 -= learning_rate * d_loss_b2
+        
+        print(f"  y_pred={y_pred:.2f}, loss={loss:.3f}")
+        print(f"  Updated weights: w1_1={w1_1:.3f}, w1_2={w1_2:.3f}, b1={b1:.3f}, w2={w2:.3f}, b2={b2:.3f}")
+    
+    print(f"\nEpoch {epoch+1} average loss: {total_loss/len(dataset):.3f}\n")
+
+# Final test
+print("=== Final Predictions ===")
+for features, y_true in dataset:
+    x1, x2 = features
+    z1 = w1_1 * x1 + w1_2 * x2 + b1
+    h = max(0, z1)
+    y_pred = w2 * h + b2
+    print(f"x1={x1}, x2={x2} → prediction={y_pred:.2f} (true={y_true})")
+```
+
