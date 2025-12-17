@@ -544,3 +544,116 @@ for features, y_true in dataset:
     print(f"x1={x1}, x2={x2} → prediction={y_pred:.2f} (true={y_true})")
 ```
 
+## Cross Entropy in Machine Learning
+Cross entropy is a way to measure how wrong your model's predictions are, especially for classification problems (like deciding if an email is spam or not spam, or recognizing if a picture shows a cat, dog, or bird).
+
+Cross entropy measures how "surprised" we should be by the reality given your prediction. If you predicted high probability for what actually happened, your cross entropy (error) is low. If you predicted low probability for what actually happened, your cross entropy (error) is high.
+
+A Simple Example
+
+Let's say you're building a model to identify animals in photos. For one photo:
+
+Your model's prediction:
+
+- Cat: 70% (0.7)
+- Dog: 20% (0.2)
+- Bird: 10% (0.1)
+
+Actual answer: It's a Cat
+
+Cross Entropy Calculation:
+```text
+Cross Entropy = -log(probability of correct answer)
+              = -log(0.7)
+              = 0.36
+```
+The better your prediction, the lower the cross entropy!
+
+Why Not Just Use Regular Error?
+
+Regular error (like in our backpropagation example) works for predicting numbers (test scores, house prices).
+
+But for classification (choosing between categories), we need something that:
+
+- Works with probabilities (0 to 1)
+- Heavily penalizes confident wrong answers
+- Has nice mathematical properties for optimization
+
+### Real Example: Email Spam Detector
+```yaml
+Email #1:
+
+Model predicts: 95% spam (p = 0.95)
+Actual: Spam (y = 1)
+Cross Entropy = -(1 × log(0.95)) = 0.05 ✅ Low error!
+
+Email #2:
+
+Model predicts: 30% spam (p = 0.30)
+Actual: Spam (y = 1)
+Cross Entropy = -(1 × log(0.30)) = 1.20 ❌ Higher error!
+
+Email #3:
+
+Model predicts: 95% spam (p = 0.95)
+Actual: Not spam (y = 0)
+Cross Entropy = -(0 × log(0.95) + 1 × log(0.05)) = 3.00 ❌❌ Very high error!
+```
+
+### Why "Cross" Entropy?
+The "cross" comes from information theory - you're measuring the difference between two probability distributions:
+
+- The true distribution (actual answer: 100% cat, 0% dog, 0% bird)
+- Your predicted distribution (70% cat, 20% dog, 10% bird)
+
+When to Use It
+```yaml
+✅ Classification problems (spam/not spam, cat/dog/bird)
+✅ When output is probabilities
+❌ Not for regression (predicting continuous numbers like prices or temperatures)
+```
+
+## What is a Log Function? 🧮
+A logarithm (log) is just a fancy way of asking: "How many times do I need to multiply 10 to get this number?"
+
+"What power do I raise 10 to, to get this number?" That's it! 🎯
+```
+log(50) = ≈ 1.7 (because 10^1.7 ≈ 50)
+log(500) = ≈ 2.7 (because 10^2.7 ≈ 500)
+log(5) = ≈ 0.7 (because 10^0.7 ≈ 5)
+
+log(1) = 0
+
+Why? Because 10⁰ = 1
+You don't need to multiply 10 at all!
+
+log(0.1) = -1
+
+Why? Because 10⁻¹ = 1/10 = 0.1
+Negative exponents mean division!
+
+Exponent
+10² = 100
+
+↓ Log goes backwards ↓
+
+log(100) = 2
+```
+
+(Note: By default, "log" usually means log base 10, but you can have other bases too, like log base 2 or "natural log" which uses a special number called e. But the concept is the same!)
+
+### What is "e" (Euler's Number)? 🔢
+The Number Itself: e ≈ 2.71828...
+
+It goes on forever (like π = 3.14159...), but we usually round it to 2.718.
+
+```
+e = lim(n→∞) (1 + 1/n)ⁿ
+
+e ≈ 2.718 is the number you get from continuous compound growth
+ln(x) asks: "e to what power equals x?"
+It's called "natural" because it appears naturally in growth, decay, and calculus
+```
+In ML, we use ln because the math works out beautifully!
+
+Think of e as nature's favorite growth rate! 🌱
