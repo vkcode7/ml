@@ -657,3 +657,110 @@ It's called "natural" because it appears naturally in growth, decay, and calculu
 In ML, we use ln because the math works out beautifully!
 
 Think of e as nature's favorite growth rate! 🌱
+
+## What is Self-Attention
+
+Self-attention is a mechanism that allows a model to look at different parts of the input and decide which parts are most important for understanding each word.
+
+### The "Self" Part
+It's called "self-attention" because the input attends to itself - each word looks at all other words (including itself) in the sentence to understand its meaning better.
+
+### Real-Life Analogy 📚
+Imagine you're reading this sentence: _"The animal didn't cross the street because it was too tired."_
+
+When you read the word "it", your brain automatically looks back at the sentence to figure out what "it" refers to. Is it the animal or the street?
+
+You pay attention to "animal" because that makes sense - animals get tired, streets don't!
+
+That's exactly what self-attention does - it helps each word "look around" at other words to understand context better.
+
+### How It Works (Step-by-Step)
+Let's use a simple sentence: "Cat ate mouse". 
+
+Step1: Each word asks "Who should I pay attention to?"
+
+For the word "ate":
+- How much should I look at "Cat"?
+- How much should I look at "ate" (itself)?
+- How much should I look at "mouse"?
+
+Step2: Step 2: Calculate Attention Scores
+
+The model creates three things for each word (using learned weights):
+
+- Query (Q): "What am I looking for?"
+- Key (K): "What do I have to offer?"
+- Value (V): "What information do I carry?"
+
+Step 3: Compute Similarity
+
+For "ate" attending to each word:
+```yaml
+Attention Score = Query("ate") · Key("Cat")    → High score! (subject of action)
+Attention Score = Query("ate") · Key("ate")    → Medium score
+Attention Score = Query("ate") · Key("mouse")  → High score! (object of action)
+```
+The dot product (·) measures how similar the query and key are.
+
+Step 4: Softmax (Make it a Probability)
+```yaml
+Convert scores to percentages that sum to 100%:
+"Cat":   40%
+"ate":   20%
+"mouse": 40%
+```
+
+Step 5: Weighted Sum
+
+Create a new representation of "ate" by combining the Values:
+```py
+New "ate" = (40% × Value("Cat")) + (20% × Value("ate")) + (40% × Value("mouse"))
+```
+Now the representation of "ate" contains information from all relevant words!
+
+Visual Example:
+```text
+Sentence: "The cat sat on the mat"
+When processing "sat":
+┌───────────────────────────────────────────────┐
+│  "The"   "cat"   "sat"   "on"   "the"   "mat" │
+│   ↓      ↓       ↓      ↓       ↓      ↓      │
+│   5%    40%     20%    10%     5%     20%     │
+│   └──────┴───────┴──────┴───────┴──────┘      │
+│              Attention Weights                │
+│                     ↓                         │
+│         Enhanced "sat" representation         │
+└───────────────────────────────────────────────┘
+```
+
+### Why Is It Powerful?
+1. Captures Long-Range Dependencies<br>
+"The cat, which was very fluffy and belonged to my neighbor, ate the mouse."<br>
+Self-attention can connect "cat" and "ate" even though they're far apart!
+2. Parallel Processing<br>
+Unlike RNNs (which process words one-by-one), self-attention looks at ALL words simultaneously. This makes it:
+
+    Much faster to train<br>
+    Can use GPUs efficiently
+
+3. Context-Aware Representations<br>
+The same word gets different representations based on context:
+```text
+"bank" in "river bank" vs "bank account"
+"bat" in "baseball bat" vs "vampire bat"
+```
+
+### Multi-Head Attention (The "Multi" Part)
+In practice, we use multiple attention heads running in parallel. Think of it like having multiple experts:
+```yaml
+Head 1: Focuses on grammar (subject-verb relationships)
+Head 2: Focuses on semantics (meaning)
+Head 3: Focuses on co-references (pronouns)
+etc.
+```
+Each head learns to pay attention to different aspects!
+
+### Key Takeaway
+**Self-attention is like giving every word a pair of eyes to look around the sentence and decide "Which other words help me understand my meaning better?"**
+
+Instead of processing words in isolation, each word gets to "consult" with all the other words to build a richer, context-aware understanding! 🎯
