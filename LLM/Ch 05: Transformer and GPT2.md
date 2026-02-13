@@ -22,11 +22,11 @@ The key breakthrough:
 ## The Core Problem
 
 We want to compute:
-
+```math
 [
 P(\text{next word} \mid \text{previous words})
 ]
-
+```
 But we want the model to:
 
 * Understand long-range dependencies
@@ -71,13 +71,13 @@ Self-attention lets the word “it” look back at “animal”.
 ### Mathematical Core
 
 Given input matrix:
-
+```math
 [
 X \in \mathbb{R}^{n \times d}
 ]
-
+```
 Compute:
-
+```math
 [
 Q = XW_Q
 ]
@@ -87,13 +87,13 @@ K = XW_K
 [
 V = XW_V
 ]
-
+```
 Then attention:
-
+```math
 [
 \text{Attention}(Q,K,V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d}}\right)V
 ]
-
+```
 Interpretation:
 
 * QKᵀ → similarity between words
@@ -116,17 +116,17 @@ Problem:
 Solution: **Residual connection**
 
 Instead of:
-
+```math
 [
 y = F(x)
 ]
-
+```
 We compute:
-
+```math
 [
 y = x + F(x)
 ]
-
+```
 Meaning:
 
 > The layer only learns the *difference* from input.
@@ -148,11 +148,11 @@ Deep networks can become unstable because values grow or shrink too much.
 LayerNorm fixes this.
 
 For each token representation:
-
+```math
 [
 \text{LayerNorm}(x) = \frac{x - \mu}{\sigma} \gamma + \beta
 ]
-
+```
 Where:
 
 * μ = mean of features
@@ -183,11 +183,11 @@ That combination makes Transformers trainable at huge scale.
 # 5️⃣ Feedforward Layer (MLP inside Transformer)
 
 After attention, we apply a position-wise MLP:
-
+```math
 [
 \text{MLP}(x) = W_2 , \sigma(W_1 x)
 ]
-
+```
 Typically:
 
 * W₁ expands dimension (e.g., 768 → 3072)
@@ -230,11 +230,11 @@ It uses:
 ### “Decoder-only” means:
 
 It only predicts next tokens:
-
+```math
 [
 P(x_t \mid x_{<t})
 ]
-
+```
 No encoder part like translation models.
 
 ---
@@ -242,14 +242,14 @@ No encoder part like translation models.
 ## GPT-2 Block Structure (Pre-LN style)
 
 Modern GPT-style block:
-
+```math
 [
 x = x + \text{Attention}(\text{LayerNorm}(x))
 ]
 [
 x = x + \text{MLP}(\text{LayerNorm}(x))
 ]
-
+```
 Notice:
 LayerNorm happens *before* sublayers.
 
