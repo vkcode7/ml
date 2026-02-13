@@ -228,7 +228,310 @@ Multimodal models = translate between them
 
 ---
 
-If you'd like, I can next explain:
+## 🧠 Multimodal AI — Images, Audio, Video, VQ-VAE, VQGAN, Diffusion
+
+Multimodal models handle **multiple data types**:
+
+```
+Text + Images + Audio + Video
+```
+
+Core challenge:
+
+> Convert different signal types into representations neural networks can process and align.
+
+---
+
+# 1️⃣ Images
+
+An image is:
+
+```
+H × W × 3 tensor
+```
+
+Example:
+
+```
+256 × 256 × 3
+```
+
+Two major modeling approaches:
+
+### A) Discrete Token Approach
+
+Convert image into tokens → use Transformer.
+
+Used in early systems like OpenAI DALL·E (v1).
+
+### B) Diffusion Approach
+
+Generate images by denoising noise (modern standard).
+
+Used in Stability AI Stable Diffusion.
+
+---
+
+# 2️⃣ Audio
+
+Audio = 1D waveform:
+
+```
+samples over time
+```
+
+Example:
+
+```
+44,100 samples per second
+```
+
+Common representations:
+
+* Raw waveform
+* Spectrogram (time-frequency image)
+* Discrete audio tokens (e.g., codec models)
+
+Modern approach:
+
+* Compress audio into discrete tokens
+* Model with Transformer
+* Or generate with diffusion
+
+---
+
+# 3️⃣ Video
+
+Video = sequence of images over time:
+
+```
+Frames × Height × Width × Channels
+```
+
+Example:
+
+```
+16 frames × 256 × 256 × 3
+```
+
+Hard because:
+
+* Spatial structure (like image)
+* Temporal structure (like sequence)
+
+Approaches:
+
+* 3D CNNs
+* Space-time Transformers
+* Diffusion in latent space
+
+---
+
+# 4️⃣ VQ-VAE (Vector Quantized VAE)
+
+Key idea:
+
+> Convert continuous images into discrete tokens.
+
+## Step-by-step:
+
+### 1️⃣ Encoder
+
+Image → latent feature map
+
+### 2️⃣ Vector Quantization
+
+Replace each latent vector with nearest codebook vector.
+
+So continuous → discrete index.
+
+### 3️⃣ Decoder
+
+Reconstruct image.
+
+---
+
+## Why Important?
+
+It turns:
+
+```
+Image → grid of token IDs
+```
+
+Now image can be modeled like language.
+
+This enabled early text-to-image transformers.
+
+---
+
+# 5️⃣ VQGAN
+
+VQGAN = VQ-VAE + GAN loss.
+
+GAN component improves realism.
+
+Standard VQ-VAE:
+
+* Blurry reconstructions
+
+VQGAN:
+
+* Sharp, realistic textures
+
+Used in early creative AI systems.
+
+---
+
+# 6️⃣ Diffusion Models (Modern Standard)
+
+Instead of tokenizing images:
+
+> Learn to reverse a noise process.
+
+## Training
+
+Add noise gradually:
+
+```
+Image → noisy → more noisy → pure noise
+```
+
+Model learns to predict noise.
+
+---
+
+## Generation
+
+Start from noise:
+
+```
+Noise → less noisy → clearer → final image
+```
+
+Each step predicts noise and removes it.
+
+---
+
+# Why Diffusion Wins
+
+* High image quality
+* Stable training
+* Scales well
+* Better than GANs for diversity
+
+---
+
+# 7️⃣ Latent Diffusion (Efficiency Boost)
+
+Instead of diffusing pixels:
+
+```
+Image → encoder → latent space
+Diffusion happens in latent
+Decode to pixel space
+```
+
+Much cheaper.
+
+Stable Diffusion uses this.
+
+---
+
+# 8️⃣ Multimodal Alignment
+
+To connect text + image:
+
+Text embedding and image embedding are aligned in shared space.
+
+Concept:
+
+```
+Text: "a red car"
+Image of red car
+→ embeddings close in vector space
+```
+
+This allows:
+
+* Text-to-image
+* Image captioning
+* Visual Q&A
+
+---
+
+# 9️⃣ Audio & Video Diffusion
+
+Same idea applies:
+
+Audio diffusion:
+
+* Start with noise waveform
+* Iteratively denoise
+
+Video diffusion:
+
+* Denoise across space + time
+* Very compute heavy
+
+---
+
+# 🔄 VQ vs Diffusion Comparison
+
+| Feature      | VQ-VAE / VQGAN  | Diffusion           |
+| ------------ | --------------- | ------------------- |
+| Output type  | Discrete tokens | Continuous          |
+| Generation   | Autoregressive  | Iterative denoising |
+| Speed        | Faster          | Slower              |
+| Quality      | Good            | Excellent           |
+| Modern usage | Limited         | Dominant            |
+
+---
+
+# 🧠 Big Picture
+
+Multimodal systems solve two problems:
+
+1. Represent different signals in compatible formats
+2. Learn cross-modal relationships
+
+Two major paradigms:
+
+### Tokenize everything (VQ approach)
+
+Treat all modalities like language.
+
+### Continuous latent + diffusion
+
+Generate signals by denoising.
+
+Modern models prefer the second.
+
+---
+
+# 🎯 Mental Model
+
+Think of multimodal AI as:
+
+```
+Language = symbols
+Images = spatial patterns
+Audio = time patterns
+Video = space + time patterns
+```
+
+Neural nets learn to translate between these spaces.
+
+---
+
+If you'd like next, I can explain:
+
+* CLIP-style contrastive alignment
+* How vision-language models work internally
+* How multimodal LLMs process images in practice
+* Why video models are so expensive
+* Mathematical connection between diffusion and score matching
+
 
 * CLIP-style alignment
 * How GPT-4V style vision models work conceptually
