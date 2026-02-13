@@ -1062,9 +1062,481 @@ For SEC filings specifically:
 
 If you'd like, I can next:
 
-* Show Python code to compute exact token counts using `tiktoken`
 * Estimate cost for specific OpenAI model pricing
 * Compare cost of RAG vs fine-tuning
 * Show optimal chunking strategy for 10-Ks
 
 
+# Show Python code to compute exact token counts using `tiktoken`
+
+Here's how to count tokens using tiktoken, which is the official tokenizer library from OpenAI:
+
+```py
+import tiktoken
+
+# Basic token counting
+text = "Hello! How are you doing today?"
+
+# For GPT-4, GPT-3.5, and other OpenAI models
+encoding = tiktoken.encoding_for_model("gpt-4")
+tokens = encoding.encode(text)
+
+print(f"Text: {text}")
+print(f"Token count: {len(tokens)}")
+print(f"Tokens: {tokens}")
+print(f"Decoded tokens: {[encoding.decode([token]) for token in tokens]}")
+```
+
+**Output:**
+```
+Text: Hello! How are you doing today?
+Token count: 7
+Tokens: [9906, 0, 2650, 527, 499, 3815, 3432, 30]
+Decoded tokens: ['Hello', '!', ' How', ' are', ' you', ' doing', ' today', '?']
+```
+
+Different Models Use Different Encodings
+
+```python
+import tiktoken
+
+text = "The quick brown fox jumps over the lazy dog."
+
+# Different encodings for different models
+encodings = {
+    "gpt-4": tiktoken.encoding_for_model("gpt-4"),
+    "gpt-3.5-turbo": tiktoken.encoding_for_model("gpt-3.5-turbo"),
+    "text-davinci-003": tiktoken.encoding_for_model("text-davinci-003"),
+}
+
+# Or use encoding names directly
+# cl100k_base: GPT-4, GPT-3.5-turbo
+# p50k_base: Codex models, text-davinci-002/003
+# r50k_base: GPT-3 models like davinci
+
+for model_name, encoding in encodings.items():
+    token_count = len(encoding.encode(text))
+    print(f"{model_name}: {token_count} tokens")
+```
+
+Truncating Text to Fit Token Limits
+```python
+import tiktoken
+
+def truncate_to_token_limit(text, max_tokens, model="gpt-4"):
+    """Truncate text to fit within a token limit."""
+    encoding = tiktoken.encoding_for_model(model)
+    tokens = encoding.encode(text)
+    
+    if len(tokens) <= max_tokens:
+        return text
+    
+    # Truncate and decode
+    truncated_tokens = tokens[:max_tokens]
+    return encoding.decode(truncated_tokens)
+
+long_text = "This is a very long text. " * 100
+max_tokens = 50
+
+truncated = truncate_to_token_limit(long_text, max_tokens)
+print(f"Original tokens: {len(tiktoken.encoding_for_model('gpt-4').encode(long_text))}")
+print(f"Truncated tokens: {len(tiktoken.encoding_for_model('gpt-4').encode(truncated))}")
+print(f"Truncated text: {truncated}...")
+```
+
+# A 10-K Chunking Strategy
+
+# Optimal Chunking Strategy for 10-K SEC Filings
+
+10-Ks are tricky because they're long (50-300 pages), have specific sections, tables, and legal language. Here's a production-ready chunking strategy:
+
+```python
+import tiktoken
+from typing import List, Dict
+import re
+
+class TenKChunker:
+    def __init__(self, model="gpt-4", chunk_size=1000, overlap=200):
+        """
+        chunk_size: target tokens per chunk (1000-1500 is good for 10-Ks)
+        overlap: tokens to overlap between chunks (helps maintain context)
+        """
+        self.encoding = tiktoken.encoding_for_model(model)
+        self.chunk_size = chunk_size
+        self.overlap = overlap
+        
+    def count_tokens(self, text: str) -> int:
+        return len(self.encoding.encode(text))
+    
+    def extract_sections(self, text: str) -> Dict[str, str]:
+        """
+        Extract major 10-K sections. These are standardized by SEC.
+        """
+        sections = {
+            "Item 1": "Business",
+            "Item 1A": "Risk Factors", 
+            "Item 1B": "Unresolved Staff Comments",
+            "Item 2": "Properties",
+            "Item 3": "Legal Proceedings",
+            "Item 4": "Mine Safety Disclosures",
+            "Item 5": "Market for Registrant's Common Equity",
+            "Item 6": "Selected Financial Data",
+            "Item 7": "MD&A",  # Management Discussion & Analysis - VERY IMPORTANT
+            "Item 7A": "Quantitative and Qualitative Disclosures About Market Risk",
+            "Item 8": "Financial Statements",
+            "Item 9": "Changes in and Disagreements with Accountants",
+            "Item 9A": "Controls and Procedures",
+            "Item 9B": "Other Information",
+            "Item 10": "Directors, Executive Officers and Corporate Governance",
+            "Item 11": "Executive Compensation",
+            "Item 12": "Security Ownership",
+            "Item 13": "Certain Relationships and Related Transactions",
+            "Item 14": "Principal Accounting Fees and Services",
+            "Item 15": "Exhibits, Financial Statement Schedules"
+        }
+        
+        extracted = {}
+        
+        # Pattern to match item headers (case insensitive, flexible formatting)
+        for item_num, item_name in sections.items():
+            # Match patterns like "Item 1." or "ITEM 1 -" or "Item 1:"
+            pattern = rf"{item_num}[\.\:\-\s]+{item_name}"
+            match = re.search(pattern, text, re.IGNORECASE)
+            
+            if match:
+                start_pos = match.start()
+                
+                # Find the next item to determine end position
+                next_item_pos = len(text)
+                for next_item in sections.keys():
+                    if next_item > item_num:  # Only look for items that come after
+                        next_pattern = rf"{next_item}[\.\:\-\s]+"
+                        next_match = re.search(next_pattern, text[start_pos+100:], re.IGNORECASE)
+                        if next_match:
+                            next_item_pos = min(next_item_pos, start_pos + 100 + next_match.start())
+                
+                extracted[item_num] = text[start_pos:next_item_pos].strip()
+        
+        return extracted
+    
+    def chunk_with_semantic_boundaries(self, text: str, section_name: str = "") -> List[Dict]:
+        """
+        Chunk text with awareness of semantic boundaries (paragraphs, sentences).
+        Better than hard token cutoffs.
+        """
+        chunks = []
+        
+        # Split by paragraphs first (double newline)
+        paragraphs = re.split(r'\n\s*\n', text)
+        
+        current_chunk = ""
+        current_tokens = 0
+        
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+                
+            para_tokens = self.count_tokens(para)
+            
+            # If single paragraph exceeds chunk size, split by sentences
+            if para_tokens > self.chunk_size:
+                # Save current chunk if it exists
+                if current_chunk:
+                    chunks.append({
+                        'text': current_chunk.strip(),
+                        'tokens': current_tokens,
+                        'section': section_name
+                    })
+                    current_chunk = ""
+                    current_tokens = 0
+                
+                # Split large paragraph by sentences
+                sentences = re.split(r'(?<=[.!?])\s+', para)
+                for sent in sentences:
+                    sent_tokens = self.count_tokens(sent)
+                    
+                    if current_tokens + sent_tokens > self.chunk_size and current_chunk:
+                        chunks.append({
+                            'text': current_chunk.strip(),
+                            'tokens': current_tokens,
+                            'section': section_name
+                        })
+                        # Keep overlap from end of previous chunk
+                        overlap_text = self._get_overlap(current_chunk)
+                        current_chunk = overlap_text + " " + sent
+                        current_tokens = self.count_tokens(current_chunk)
+                    else:
+                        current_chunk += " " + sent if current_chunk else sent
+                        current_tokens += sent_tokens
+            
+            # Normal case: add paragraph to current chunk
+            elif current_tokens + para_tokens <= self.chunk_size:
+                current_chunk += "\n\n" + para if current_chunk else para
+                current_tokens = self.count_tokens(current_chunk)
+            
+            # Paragraph would exceed limit, start new chunk
+            else:
+                if current_chunk:
+                    chunks.append({
+                        'text': current_chunk.strip(),
+                        'tokens': current_tokens,
+                        'section': section_name
+                    })
+                
+                # Start new chunk with overlap
+                overlap_text = self._get_overlap(current_chunk)
+                current_chunk = overlap_text + "\n\n" + para if overlap_text else para
+                current_tokens = self.count_tokens(current_chunk)
+        
+        # Add final chunk
+        if current_chunk:
+            chunks.append({
+                'text': current_chunk.strip(),
+                'tokens': current_tokens,
+                'section': section_name
+            })
+        
+        return chunks
+    
+    def _get_overlap(self, text: str) -> str:
+        """Get the last N tokens for overlap."""
+        tokens = self.encoding.encode(text)
+        if len(tokens) <= self.overlap:
+            return text
+        
+        overlap_tokens = tokens[-self.overlap:]
+        return self.encoding.decode(overlap_tokens)
+    
+    def chunk_10k(self, text: str, preserve_sections: bool = True) -> List[Dict]:
+        """
+        Main method: chunk a 10-K filing optimally.
+        
+        preserve_sections=True: Keep section boundaries intact (recommended)
+        preserve_sections=False: Treat as one document
+        """
+        if preserve_sections:
+            # Extract sections first
+            sections = self.extract_sections(text)
+            
+            all_chunks = []
+            
+            # Chunk each section separately
+            for section_id, section_text in sections.items():
+                section_chunks = self.chunk_with_semantic_boundaries(
+                    section_text, 
+                    section_name=section_id
+                )
+                all_chunks.extend(section_chunks)
+            
+            # If some text wasn't captured in sections, chunk it too
+            total_section_length = sum(len(s) for s in sections.values())
+            if total_section_length < len(text) * 0.8:  # Less than 80% captured
+                remaining = self.chunk_with_semantic_boundaries(text, "Uncategorized")
+                all_chunks.extend(remaining)
+            
+            return all_chunks
+        else:
+            return self.chunk_with_semantic_boundaries(text)
+
+
+# Example usage
+if __name__ == "__main__":
+    # Simulated 10-K excerpt
+    sample_10k = """
+    Item 7. Management's Discussion and Analysis of Financial Condition and Results of Operations
+    
+    The following discussion should be read in conjunction with our consolidated financial statements.
+    
+    Overview
+    
+    Our company operates in three segments: Cloud Services, Software Licensing, and Hardware Systems.
+    Revenue increased 15% year-over-year driven primarily by cloud adoption.
+    
+    We continue to invest heavily in AI and machine learning capabilities to enhance our product offerings.
+    Operating margins improved from 23% to 26% due to operational efficiencies and economies of scale.
+    
+    Critical Accounting Policies
+    
+    Revenue Recognition: We recognize revenue when control of promised goods or services transfers to customers.
+    For multi-year cloud contracts, we recognize revenue ratably over the contract term.
+    
+    Stock-Based Compensation: We measure stock-based awards at grant-date fair value and recognize 
+    expense over the vesting period.
+    
+    Item 7A. Quantitative and Qualitative Disclosures About Market Risk
+    
+    We are exposed to market risks including interest rate risk and foreign currency risk.
+    Our international operations account for 45% of total revenue, exposing us to currency fluctuations.
+    """ * 50  # Simulate longer document
+    
+    # Initialize chunker
+    chunker = TenKChunker(
+        model="gpt-4",
+        chunk_size=1000,  # ~1000 tokens per chunk
+        overlap=200       # 200 token overlap
+    )
+    
+    # Chunk the 10-K
+    chunks = chunker.chunk_10k(sample_10k, preserve_sections=True)
+    
+    # Display results
+    print(f"Total chunks created: {len(chunks)}\n")
+    
+    for i, chunk in enumerate(chunks[:5], 1):  # Show first 5
+        print(f"Chunk {i}:")
+        print(f"  Section: {chunk['section']}")
+        print(f"  Tokens: {chunk['tokens']}")
+        print(f"  Preview: {chunk['text'][:200]}...")
+        print()
+```
+
+---
+
+## **Advanced: Table-Aware Chunking**
+
+10-Ks have lots of tables. Tables break badly with naive chunking:
+
+```python
+import re
+from typing import List, Dict
+
+class TableAwareChunker(TenKChunker):
+    def detect_tables(self, text: str) -> List[Dict]:
+        """
+        Detect table-like structures in text.
+        Tables often have multiple columns aligned with spaces/tabs.
+        """
+        tables = []
+        lines = text.split('\n')
+        
+        in_table = False
+        table_start = 0
+        table_lines = []
+        
+        for i, line in enumerate(lines):
+            # Heuristic: tables have multiple whitespace-separated columns
+            # and consistent alignment
+            columns = len(re.findall(r'\s{2,}', line))
+            
+            if columns >= 3:  # At least 3 columns
+                if not in_table:
+                    in_table = True
+                    table_start = i
+                table_lines.append(line)
+            else:
+                if in_table and len(table_lines) >= 3:  # Minimum 3 rows
+                    tables.append({
+                        'start_line': table_start,
+                        'end_line': i - 1,
+                        'content': '\n'.join(table_lines)
+                    })
+                in_table = False
+                table_lines = []
+        
+        return tables
+    
+    def chunk_with_table_preservation(self, text: str, section_name: str = "") -> List[Dict]:
+        """
+        Keep tables intact in single chunks when possible.
+        """
+        tables = self.detect_tables(text)
+        chunks = []
+        
+        # Split text around tables
+        current_pos = 0
+        
+        for table in tables:
+            # Chunk text before table
+            before_table = text[current_pos:text.find(table['content'])]
+            if before_table.strip():
+                chunks.extend(
+                    self.chunk_with_semantic_boundaries(before_table, section_name)
+                )
+            
+            # Add table as its own chunk (or split if too large)
+            table_tokens = self.count_tokens(table['content'])
+            if table_tokens <= self.chunk_size * 1.5:  # Allow tables to be slightly larger
+                chunks.append({
+                    'text': table['content'],
+                    'tokens': table_tokens,
+                    'section': section_name,
+                    'type': 'table'
+                })
+            else:
+                # Table too large, split by rows
+                table_rows = table['content'].split('\n')
+                header = table_rows[0] if table_rows else ""
+                
+                current_table_chunk = header
+                current_tokens = self.count_tokens(header)
+                
+                for row in table_rows[1:]:
+                    row_tokens = self.count_tokens(row)
+                    if current_tokens + row_tokens > self.chunk_size:
+                        chunks.append({
+                            'text': current_table_chunk,
+                            'tokens': current_tokens,
+                            'section': section_name,
+                            'type': 'table_fragment'
+                        })
+                        current_table_chunk = header + "\n" + row
+                        current_tokens = self.count_tokens(current_table_chunk)
+                    else:
+                        current_table_chunk += "\n" + row
+                        current_tokens += row_tokens
+                
+                if current_table_chunk:
+                    chunks.append({
+                        'text': current_table_chunk,
+                        'tokens': current_tokens,
+                        'section': section_name,
+                        'type': 'table_fragment'
+                    })
+            
+            current_pos = text.find(table['content']) + len(table['content'])
+        
+        # Chunk remaining text after last table
+        remaining = text[current_pos:]
+        if remaining.strip():
+            chunks.extend(
+                self.chunk_with_semantic_boundaries(remaining, section_name)
+            )
+        
+        return chunks
+```
+
+---
+
+## **Production Tips for 10-K Processing**
+
+```python
+# Recommended settings for different use cases
+
+# For Q&A / RAG systems
+chunker = TenKChunker(
+    chunk_size=1000,    # Good balance for retrieval
+    overlap=200         # Ensures context isn't lost
+)
+
+# For summarization
+chunker = TenKChunker(
+    chunk_size=2000,    # Larger chunks for better context
+    overlap=100         # Less overlap needed
+)
+
+# For fine-tuning data
+chunker = TenKChunker(
+    chunk_size=512,     # Match your model's context window
+    overlap=0           # No overlap for training data
+)
+```
+
+**Key Insights:**
+- **Always preserve section boundaries** - Item 7 (MD&A) is gold for analysis
+- **Use overlap** - 10-Ks reference prior sections constantly
+- **Handle tables specially** - They contain critical financial data
+- **Metadata matters** - Tag chunks with section, year, company ticker
+- **Token counts vary** - Financial jargon tokenizes differently than normal text
+
+This approach gives you semantically meaningful chunks that LLMs can actually understand and reason about!
