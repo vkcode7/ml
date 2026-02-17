@@ -41,7 +41,7 @@ They will ask:
  “How many AI agents are running inside our workflows?”
 From DevOps automation to enterprise data systems, AI agents will sit between humans and systems, orchestrating tasks at scale.
 ```
-![](./media/Agents1.jpeg)
+![](./images/Agents1.jpeg)
 
 
 
