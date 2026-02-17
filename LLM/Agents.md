@@ -1,5 +1,5 @@
 How AI Agents Actually Work (And Why They Matter Now)
-```
+```text
 Most people think AI is just a chatbot that answers questions.
 But modern AI agents are very different. They don’t just respond. They plan. They reason. They use tools. They remember context. And they improve through reflection.
 Let’s break it down in simple terms:
@@ -41,6 +41,7 @@ They will ask:
  “How many AI agents are running inside our workflows?”
 From DevOps automation to enterprise data systems, AI agents will sit between humans and systems, orchestrating tasks at scale.
 ```
+![](./media/Agents1.jpeg)
 
 
 
