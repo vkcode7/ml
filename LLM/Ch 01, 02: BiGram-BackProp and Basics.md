@@ -99,29 +99,27 @@ Dot Product:
 
 For two vectors $\mathbf{a}$ and $\mathbf{b}$ in $n$-dimensional space:
 
-
+```text
 $$\mathbf{a} = [a_1, a_2, \dots, a_n], \quad \mathbf{b} = [b_1, b_2, \dots, b_n]$$
 
 $\mathbf{a} \cdot \mathbf{b} = a_1 b_1 + a_2 b_2 + \dots + a_n b_n = \sum_{i=1}^n a_i b_i$
-
+```
 Alternative geometric definition (in 2D or 3D):
 
 $$\mathbf{a} \cdot \mathbf{b} = \|\mathbf{a}\| \|\mathbf{b}\| \cos \theta$$
 
 where:
-
+```math
 $\|\mathbf{a}\|$ and $\|\mathbf{b}\|$ are the magnitudes (lengths) of the vectors,
 $\theta$ is the angle between them.
+```
 
 This shows:
 ```text
 If vectors point in the same direction ($\theta = 0^\circ$), dot product is maximum (positive).
 If perpendicular ($\theta = 90^\circ$), dot product = 0.
 If opposite directions ($\theta = 180^\circ$), dot product is negative and minimum.
-```
-```
 
-```text
 They built a whole new AI called the Transformer. It has two main parts:
 
 Encoder: Reads the input sentence (e.g., English) and understands it using stacks of attention layers.
