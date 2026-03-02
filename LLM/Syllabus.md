@@ -20,3 +20,12 @@ Chapter 15 Finetuning II: RL (reinforcement learning, RLHF, PPO, DPO)
 Chapter 16 Deployment (API, web app)
 Chapter 17 Multimodal (VQVAE, diffusion transformer)
 ```
+
+Other Resources:
+
+- https://github.com/jamwithai/production-agentic-rag-course
+- https://academy.langchain.com/courses/deep-agents-with-langgraph
+- https://www.pinecone.io/learn/
+- https://www.anthropic.com/learn
+- 
+- 
