@@ -591,3 +591,77 @@ Today you’ll see:
 Neither is “magical”; they’re just values that worked extremely well early and got copied / slightly adjusted as hardware and scale evolved.
 
 If someone tomorrow shows that 96 or 160 performs better on H200/B200 GPUs with FP8 training, we might slowly drift toward those — but inertia is strong, so **64** and **128** will probably remain dominant for years. 😄
+
+# Multi-head attention
+
+**Yes — all heads in multi-head attention are still fundamentally doing self-attention**, and they all use the **same Q/K/V mechanism** — but they focus on **different aspects / patterns / relationships** in the data.
+
+They are **not** looking at entirely unrelated or completely different information sources — they all see **the same input tokens**, but they learn to interpret and weigh them differently.
+
+### How this works in practice
+
+1. **Same input → different projections**  
+   Every head receives the **exact same input embeddings** (or the output from the previous layer).  
+   But each head has its **own independent linear projection matrices**:
+
+   - Head 1 has W₁^Q, W₁^K, W₁^V  
+   - Head 2 has W₂^Q, W₂^K, W₂^V  
+   - … up to head h
+
+   Because these matrices are **separately trained** (different random initialization + different gradient flow during training), each head ends up projecting the input embeddings into a **different subspace** (a different "view" or "perspective" of the same data).
+
+2. **Each head computes its own self-attention independently**  
+   So every head is performing classic scaled dot-product self-attention:
+
+   ```
+   headᵢ = softmax( (Qᵢ Kᵢᵀ) / √dₖ ) Vᵢ
+   ```
+
+   But because Qᵢ, Kᵢ, Vᵢ come from different projections, the **attention scores** (QKᵀ) end up highlighting **different kinds of similarity**.
+
+3. **What the heads actually specialize in** (what the community observes)
+
+   After training, different heads very frequently learn to attend to qualitatively different patterns. Classic examples from visualization papers and interpretability work (2018–2025):
+
+   | Typical specialization (examples)          | What the head tends to attend to                              | Seen in many models? |
+   |--------------------------------------------|----------------------------------------------------------------|----------------------|
+   | Positional / adjacent tokens               | Very strong attention to the previous or next word             | Very common          |
+   | Syntactic (dependency)                     | Subject ↔ verb, noun ↔ adjective, etc.                        | Very common          |
+   | Coreference / anaphora                     | Pronoun ("it", "he") → the noun it refers to                   | Very common          |
+   | Long-range semantic similarity             | Words that mean similar things even far apart                  | Common               |
+   | Positional patterns                        | Tokens at certain relative positions (e.g. start of sentence)  | Common               |
+   | Rare / task-specific                       | Punctuation, quotation marks, specific entities, etc.         | Sometimes            |
+
+   Not every head specializes dramatically — some heads remain quite generic or average — but in well-trained models you usually see clear diversity across the 8–128 heads.
+
+### Important nuance: it's emergent, not hardcoded
+
+- Nothing in the architecture **forces** the heads to learn different things.  
+- They **could** in theory all learn almost the same pattern (and sometimes a few heads do become redundant).  
+- But because:
+  - They have separate parameters  
+  - The loss pushes the overall representation to be as useful as possible  
+  - There's some inductive bias from lower-dimensional subspaces  
+
+  → gradient descent very reliably pushes them toward **specialization** in practice.
+
+This is very analogous to how different convolutional filters in a CNN learn edge detectors, texture detectors, color blobs, etc. — nobody hard-codes it, but they diverge anyway.
+
+### Quick summary table
+
+| Property                              | Single head                  | Multi-head (each individual head) |
+|---------------------------------------|------------------------------|------------------------------------|
+| Mechanism                             | Self-attention (Q/K/V)       | Self-attention (Q/K/V)             |
+| Input tokens                          | All tokens                   | All tokens                         |
+| Projection matrices                   | One set                      | Separate set per head              |
+| Attention scores                      | One pattern                  | Different learned pattern          |
+| Typical outcome after training        | One broad view               | Diverse views / relations          |
+| Final output                          | —                            | Concatenation + projection         |
+
+So to directly answer your question:
+
+**Yes — every head is doing self-attention with its own Q/K/V.**  
+**No — they are not looking at entirely different information.**  
+**But yes — in trained models they very reliably learn to focus on meaningfully different linguistic / structural / semantic patterns.**
+
+If you'd like, I can show classic attention heatmap visualizations from BERT / GPT-style models that demonstrate this very clearly (different heads attending to very different token pairs). Just say the word! 😄
