@@ -155,7 +155,10 @@ If the model is going to accurately predict the next word, that final vector in 
 
 It will have to have somehow encoded all of the information from the full context window that's relevant to predicting the next word.
 
+## The Attention Pattern
+We’ll begin by describing a single head of attention, and later we will see how the attention block consists of many different heads running in parallel.
 
-
+Our goal is to have a series of computations produce a new refined set of embeddings E' (E-dash).
+ , where, in our case, those corresponding to the nouns have ingested the meaning from their corresponding adjectives.
 
 
