@@ -1,4 +1,7 @@
-# How it begins
+# Transformers, the tech behind LLMs
+https://www.3blue1brown.com/lessons/gpt
+
+https://www.youtube.com/watch?v=wjZofJX0v4M
 
 ## Embeddings
 The model has a predefined vocabulary, some list of all possible words, say 50,000 of them. The first matrix of the transformer, known as the embedding matrix, will have one column for each of these words. These columns determine what vector each word turns into in that first step. 
@@ -45,3 +48,36 @@ The idea is that if we want a sequence of numbers to serve as a probability dist
 Softmax turns an arbitrary list of numbers into a valid distribution, in such a way that the largest values end up closest to 1, and the smaller values end up closer to 0.
 
 The reason for calling it softmax is that instead of simply pulling out the biggest value, it produces a distribution that gives weight to all the relatively large values, commensurate with how large they are. If one entry in the input is much bigger than the rest, the corresponding output will be very close to 1, so sampling from the distribution is likely the same as just choosing the maximizing index from the input.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/gpt/howsoftmax.png)
+
+## Extra
+In some cases, such as when ChatGPT is using this distribution to sample each next word, we can add a little extra spice into this softmax function with a constant T inserted into all these exponents. We call it "temperature" since it vaguely resembles the role of temperature in certain thermodynamics equations. The effect of this constant is that when T is larger, more weight is given to lower values, making the distribution more uniform. When T is smaller, the larger values will dominate the distribution, and in the extreme setting when T is equal to 0, all the weight goes to the maximum value.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/gpt/temperatureReal.png)
+
+## Logits
+In the same way that we might call the components of the output of this function probabilities, people often refer to the components of the input as logits. So when you feed in some text, have the word embeddings flow through the network, and do this final multiplication by the unembedding matrix, machine learning people would refer to the components of that raw unnormalized output as the logits for the next word prediction.
+
+## RECAP
+The goal of the model that we began studying in the last chapter is to take in a piece of text and predict what will come next.
+
+The input text that is taken in is first broken up into little pieces that we call tokens, which are often words or pieces of words. This process, known as tokenization, is a preprocessing step that is done before any of the input actually enters the transformer.
+
+To make the examples in this lesson simpler for us to conceptualize, let's pretend that these tokens are always just words.
+
+The tokens then enter the transformer, where the first step is to associate each token with a high-dimensional vector, which we call its embedding.
+
+The important idea that we should have in mind as we continue into the attention mechanism is that directions in this high-dimensional space of all possible embeddings can correspond with meaning.
+
+The aim of a transformer is to progressively adjust these embeddings so that they don't merely encode data of an individual word, but rather a much richer contextual meaning.
+
+
+# Attention in transformers, step-by-step
+https://www.3blue1brown.com/lessons/attention#title
+
+https://www.youtube.com/watch?v=eMlx5fFNoYc
+
+
+
+
