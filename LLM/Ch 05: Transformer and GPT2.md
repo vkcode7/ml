@@ -9,9 +9,14 @@ We’ll cover:
 
 # 1️⃣ Transformer — The Core Idea
 
+- https://www.3blue1brown.com/lessons/gpt
+- https://www.youtube.com/watch?v=wjZofJX0v4M
+
+
 https://poloclub.github.io/transformer-explainer/
 
 The Transformer architecture was introduced in the 2017 paper:
+
 
 **Attention Is All You Need**
 
