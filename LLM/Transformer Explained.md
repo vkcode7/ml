@@ -113,9 +113,48 @@ The aim of a transformer is to progressively adjust these embeddings so that the
 
 
 # Attention in transformers, step-by-step
+
 https://www.3blue1brown.com/lessons/attention#title
 
 https://www.youtube.com/watch?v=eMlx5fFNoYc
+
+Transformers first hit the scene in a (now-famous) paper called Attention is All You Need, and in this chapter you and I will dig into what this attention mechanism is, by visualizing how it processes data.
+
+Consider these three phrases:
+
+- American shrew mole.
+- One mole of carbon dioxide.
+- Take a biopsy of the mole.
+You and I both know that the word mole in each of these sentences has a different meaning that's based on the context.
+
+However, after the first step of a transformer - the embedding step that associates each token with a vector - the vector that's associated with the word mole would be the same in all of these cases, as this initial token embedding is effectively a lookup table with no reference to the context.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/MoleExample.png)
+
+It's only in the next step of the transformer, the attention block, when the surrounding embeddings have the chance to pass information into the mole embedding and update its values.
+
+It is the job of an attention block to calculate what it needs to add to the generic embedding, as a function of its context, to move it to one of those specific directions.
+
+To take another example, consider the embedding of the word tower. This is presumably some very generic, non-specific direction in the space, associated with lots of other large, tall nouns.
+
+If this word was immediately preceded by Eiffel, you could imagine wanting the mechanism to update this vector so that it points in a direction that more specifically encodes the Eiffel Tower, maybe correlated with vectors associated with Paris and France and things made of iron.
+
+If it was also preceded by the word miniature, then the vector should be updated even further so that it no longer correlates with large, tall things.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/TowerExample.png)
+
+This transfer of information from the embedding of one token to that of another can occur over potentially large distances (long paragraphs) and can involve information that’s much richer than just a single word.
+
+To appreciate this point, consider how in the final step of the transformer, only the last vector in the sequence is used to make the final prediction for what comes next.
+
+For example, imagine that the text we input was most of an entire mystery novel, all the way up to a point near the end, which reads:
+
+Therefore the murderer was...
+
+If the model is going to accurately predict the next word, that final vector in the sequence which began its life simply embedding the word was will have to have been updated by all of the attention blocks to represent much more than the individual word.
+
+It will have to have somehow encoded all of the information from the full context window that's relevant to predicting the next word.
+
 
 
 
