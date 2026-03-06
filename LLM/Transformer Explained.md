@@ -3,6 +3,45 @@ https://www.3blue1brown.com/lessons/gpt
 
 https://www.youtube.com/watch?v=wjZofJX0v4M
 
+Formally speaking, a GPT is a Generative Pre-Trained Transformer. The first two words are self-explanatory: generative means the model generates new text; pre-trained means the model was trained on large amounts of data. What we will focus on is the transformer aspect of the language model, the main proponent of the recent boom in AI.
+
+## What exactly is a Transformer?
+A transformer is a special kind of neural network, a Machine Learning Model. There are a wide variety of models that can be built using transformers: voice-to-text, text-to-voice, text-to-image, machine translation, and many more. The specific variant that we will focus on, which is the type that underlies tools like ChatGPT, will be a model trained to take in a piece of text, maybe even with some surrounding images or sound accompanying it, then produce a prediction of what comes next, in the form of a probability distribution over all chunks of text that might follow.
+
+At first, predicting the next word might feel like a different goal from generating new text. But once you have a prediction model like this, one simple way to make this generate a longer piece is to give it an initial bit of text to work with, have it predict the next word, take a random sample from the distribution it just generated, then run it all again to make a new prediction based on all the text, including what it just added. This process of repeated prediction and sampling is essentially what’s happening when you interact with ChatGPT and see it producing one word at a time.
+
+## Tokens
+An input is first broken into small chunks that are known as tokens. For example, in the sentence:
+
+To date, the cleverest thinker of all time was ...
+
+The tokenization of this input would be:
+
+To| date|,| the| cle|ve|rest| thinker| of| all| time| was ...
+
+Each of these tokens is then associated with a vector, meaning some list of numbers. A common interpretation of these embeddings is that the coordinates of these vectors may somehow encode the meaning of each token. If you think of these vectors as giving coordinates in some high-dimensional space, words with similar meanings tend to land on vectors close to each other in that space. These steps are pre-processing steps that occur before anything enters the transformer itself.
+
+## Attention Block
+The encoded vectors then pass through an Attention Block where they communicate with each other to update their values based on context. For example, the meaning of the word model in the phrase a machine learning model is different from its meaning in the phrase a fashion model. The Attention Block is responsible for figuring out which words in the context are relevant to updating the meanings of other words and how exactly those meanings should be updated.
+
+After that, the vectors pass through another attention block, then another multilayer perceptron block, then another attention block, and so on, getting altered by many variants of these two operations interlaced with one another. A large number of layers like this is what puts the "deep" in deep learning.
+
+After many iterations, all the information necessary to predict the next word needs to be encoded into the last vector of the sequence, which will go through one final computation to produce a probability distribution over all the possible chunks of text that might come next.
+
+## Premise of Deep Learning
+Machine learning, broadly speaking, describes a body of methods where one uses data to determine the behavior of a program, as opposed to relying entirely on an explicitly encoded set of rules.
+
+Deep learning is a subfield of Machine Learning, focused on a specific category of models known as Neural Networks. 
+
+In deep learning, the model parameters are almost always referred to as weights, because for the most part, the only way they interact with the data being processed is through weighted sums. 
+
+To prevent the entire model from being linear, there will typically also be some nonlinear functions sprinkled in between these matrix-vector products, such as the softmax operation we will see at the end of this article.
+
+For example, the 175 billion weights in GPT-3 are organized into just under 28,000 different matrices. Those matrices fall into 8 different categories, and we will step through each type to understand what it does. As we go through, it will be fun for us to reference the numbers from GPT-3 to count up exactly where those 175 billion parameters all come from. The weights are the actual brains of the model, learned during training and determining how it behaves. 
+
+## Multilayer Perceptron(Feed-Forward Layer)
+Following the Attention Block, these vectors then pass through a Multilayer Perceptron, or Feed-Forward Layer. Here, the vectors don’t talk to each other; they all go through the same operation in parallel. 
+
 ## Embeddings
 The model has a predefined vocabulary, some list of all possible words, say 50,000 of them. The first matrix of the transformer, known as the embedding matrix, will have one column for each of these words. These columns determine what vector each word turns into in that first step. 
 
