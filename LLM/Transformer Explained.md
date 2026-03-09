@@ -176,3 +176,77 @@ Computing this query looks like taking a certain matrix, which we'll label as W_
 In our case, we'll multiply this matrix W_Q by all of the embeddings in the context and produce one query vector for each token.
 
 ![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/Q_I.png)
+
+Keep in mind, our nouns-and-adjectives example is made up. We’re showing one behavior that the relevant matrix operations could plausibly implement. Specifically, we’re imagining that this W_Q matrix maps the embeddings of nouns to a certain direction in this smaller query space (128 dim) that (somehow) encodes the notion of looking for adjectives in preceding positions.
+
+With this as our motivating example, you may very well ask: What does this matrix W_Q​ do to non-noun embeddings?
+
+Who knows. Maybe it's simultaneously trying to accomplish some other goal with them. What we're focused on right now is what is happening with the nouns.
+
+### Keys
+At the same time, a second matrix - the key matrix - is also multiplied by each of the embeddings. This key matrix is full of tunable parameters, just like the query matrix.
+
+The product is a second sequence of vectors that we call the keys. Conceptually, we want to think of these keys as potential answers to the queries. We'll label the key matrix as W_k and the Keys as K.
+
+Conceptually, we want to think of the keys as matching the queries whenever they closely align with each other. In our made up example, we might imagine that the key matrix maps the adjectives like fluffy and blue to vectors that are closely aligned with the query produced by the word creature.
+
+The way we measure how closely a given pair of key and query vectors align is to take their dot product. A larger dot product corresponds to stronger alignment.
+
+One way we could visualize this is as a grid of dots, where bigger dots correspond to larger dot products.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/DotProduct.png)
+
+Larger dot products indicate higher alignment between the key and the query, while smaller dot products indicate weaker alignment.
+
+After computing all the dot products of the key-query pairs, we're left with this grid, containing values ranging from -Infinity to +Infinity, that displays a score of how relevant each word is to updating the meaning of every other word.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/Score.png)
+
+Next what we want is for the numbers in these columns to be between 0 and 1 and for each column to add up to 1, as if they were a probability distribution.
+
+For that: compute a softmax along each one of these columns to normalize its values.
+
+After we apply softmax to all of the columns, we'll fill in the grid with these normalized values. We call this grid the attention pattern.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/Normalized.png)
+
+Based on the image, how much weight does the word blue hold relevant to the word creature? Answer => 0.58
+
+
+The original transformer paper presents us with a really compact way to write this all down:
+
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/Paper.png)
+
+Here, the variables Q and K represent the full arrays of query and key vectors, respectively—those smaller vectors obtained by multiplying the embeddings by the query and key matrices.
+
+A small technical detail that we didn't mention is that for numerical stability, it's helpful to divide all of these values by the square root of the dimension of that key-query space, hence the denominator SQRT(D_k).
+
+And that softmax function that's wrapped around the full expression is meant to be understood as applying softmax column by column.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/SoftMaxEq.png)
+
+For the purposes of our attention pattern, we would never want words that appear later in the input to influence words that appear earlier, since otherwise they could kind of give away the answer for what comes next.
+
+In order to prevent this, what we want is for all of these spots where later tokens influence earlier ones to somehow be forced to be zero. A common way to force them to equal zero, prior to applying softmax, is to set all of those entries to be negative infinity. That way, after applying softmax, all of those spots get turned into zero, but the columns stay normalized. This process is called masking.
+
+Another fact that's worth reflecting on is how the size of this attention pattern is equal to the square of the context size.
+
+![Alt]((https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/square.png)
+
+One row and one column for each token.
+
+
+This is why context size could act as a significant limitation for large language models and why scaling it up is nontrivial.
+
+Of course, motivated by a desire for larger context windows, in recent years we have seen some variations to the attention mechanism that are aimed at making context more scalable, but for now, all we're focused on are the basics.
+
+Once you have this attention pattern describing which words are relevant to updating which other words, the next step is to actually update those embeddings.
+
+For example, we would want the embedding of fluffy to somehow cause a change to the embedding of creature, one that moves it to a different part of this high-dimensional embedding space that more specifically encodes a fluffy creature.
+
+
+The most straightforward way would be to use a third matrix, what we call the value matrix. In true multi-headed attention, this matrix is factored into two parts, but for the moment, it’s easiest to think of as just one operation. We would multiply this value matrix by the embedding of that first word, for example fluffy. We'll denote this value matrix as W_v.
+
+​
+ .
