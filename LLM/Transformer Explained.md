@@ -158,7 +158,21 @@ It will have to have somehow encoded all of the information from the full contex
 ## The Attention Pattern
 We’ll begin by describing a single head of attention, and later we will see how the attention block consists of many different heads running in parallel.
 
-Our goal is to have a series of computations produce a new refined set of embeddings E' (E-dash).
- , where, in our case, those corresponding to the nouns have ingested the meaning from their corresponding adjectives.
+Our goal is to have a series of computations produce a new refined set of embeddings, E' (E-dash). Where, in our case, those corresponding to the nouns have ingested the meaning from their corresponding adjectives. Again, the initial embedding for each word E, is some high-dimensional vector that contains no reference to the context.
 
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/Embeddings.png)
 
+### Queries
+For the first step in this attention block, we can imagine each noun in the sentence asking the question:
+
+"Hey, are there any adjectives sitting in front of me?"
+
+These questions, like the one asked by the noun creature, are somehow encoded as yet another vector that we call the query.
+
+Computing this query looks like taking a certain matrix, which we'll label as W_Q, and multiplying it by the embedding of the word. Let's write the query vector as Q.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/W_Q.png)
+
+In our case, we'll multiply this matrix W_Q by all of the embeddings in the context and produce one query vector for each token.
+
+![Alt](https://3b1b-posts.us-east-1.linodeobjects.com/content/lessons/2024/attention/Q_I.png)
