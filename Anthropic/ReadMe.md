@@ -553,9 +553,8 @@ When to use:
 - Type B (steps): use for complex problems where you want model to consider broader perspective or additional viewpoints it might not naturally consider
 
 Example improvement: meal planning prompt score jumped from 3.92 to 7.86 when guidelines added, demonstrating significant quality improvement through specificity.
-</note>
 
-<note title="Structure with XML Tags">
+## Structure with XML Tags
 XML Tags for Prompt Structure = Using XML tags to organize and delineate different content sections within prompts to improve AI comprehension.
 
 Purpose = When interpolating large amounts of content into prompts, XML tags help AI models distinguish between different types of information and understand text grouping.
@@ -569,9 +568,9 @@ Example use case = Debugging prompt with mixed code and documentation becomes cl
 Benefits = Makes prompt structure obvious to AI, reduces confusion about content boundaries, improves output quality even for smaller content blocks.
 
 Application = Can wrap any interpolated content like <athlete_information> even when content is short, to clarify it's external input requiring consideration.
-</note>
 
-<note title="Providing Examples">
+
+## Providing Examples
 One-shot/Multi-shot prompting = providing examples in prompts to guide model behavior. One-shot = single example, multi-shot = multiple examples.
 
 Implementation: Structure examples with XML tags containing sample input and ideal output. Always wrap examples clearly to distinguish from actual prompt content.
@@ -588,9 +587,9 @@ Best practices:
 - Place examples after main instructions/guidelines
 
 Effectiveness boost: Combine examples with explanations of what makes them ideal to reinforce desired output characteristics.
-</note>
 
-<note title="Introducing Tool Use">
+
+# Introducing Tool Use
 Tool use = method for Claude to access external information beyond training data.
 
 Default limitation: Claude only knows information from training data, lacks current/real-time information.
