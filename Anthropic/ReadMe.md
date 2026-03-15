@@ -569,6 +569,25 @@ Benefits = Makes prompt structure obvious to AI, reduces confusion about content
 
 Application = Can wrap any interpolated content like <athlete_information> even when content is short, to clarify it's external input requiring consideration.
 
+XML tags are most useful when:
+
+- Including large amounts of context or data
+- Mixing different types of content (code, documentation, data)
+- You want to be extra clear about content boundaries
+- Working with complex prompts that interpolate multiple variables
+
+Even for shorter content, XML tags can help serve as delimiters that make your prompt structure more obvious to Claude.
+
+In practice, you might structure a prompt like this:
+```xml
+<athlete_information>
+- Height: 6'2"
+- Weight: 180 lbs
+- Goal: Build muscle
+- Dietary restrictions: Vegetarian
+</athlete_information>
+```
+Generate a meal plan based on the athlete information above.
 
 ## Providing Examples
 One-shot/Multi-shot prompting = providing examples in prompts to guide model behavior. One-shot = single example, multi-shot = multiple examples.
@@ -588,6 +607,18 @@ Best practices:
 
 Effectiveness boost: Combine examples with explanations of what makes them ideal to reinforce desired output characteristics.
 
+**Adding Context to Examples**
+Don't just provide the input/output pair - explain why the output is good:
+```xml
+<ideal_output>
+[Your example output here]
+</ideal_output>
+
+This example is well-structured, provides detailed information 
+on food choices and quantities, and aligns with the athlete's 
+goals and restrictions.
+```
+This additional context helps Claude understand the reasoning behind good responses, not just the format.
 
 # Introducing Tool Use
 Tool use = method for Claude to access external information beyond training data.
