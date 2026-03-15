@@ -1,11 +1,4 @@
-<notes>
-<critical>
-Below are notes from a video course about working with the Claude language model.
-Use these notes as a resource to answer the user's question.
-Write your answer as a standalone response - do not refer directly to these notes unless specifically requested by the user.
-</critical>
-
-<note title="Overview of Claude Models">
+# Overview of Claude Models
 Claude has three model families optimized for different priorities:
 
 Opus = highest intelligence model for complex, multi-step tasks requiring deep reasoning and planning. Trade-off: higher cost and latency.
@@ -19,9 +12,10 @@ Selection framework: Intelligence priority → Opus. Speed priority → Haiku. B
 Common approach = use multiple models in same application based on specific task requirements rather than single model selection.
 
 All models share core capabilities: text generation, coding, image analysis. Main difference is optimization focus.
-</note>
 
-<note title="Accessing the API">
+# Accessing Claude with the API
+
+## Accessing the API
 API Access Flow = 5-step process from user input to response display
 
 Step 1: Client sends user text to developer's server (never access Anthropic API directly from client apps to keep API key secret)
@@ -38,14 +32,14 @@ Step 4: Model stops when max_tokens reached or special end_of_sequence token gen
 
 Step 5: API returns response with generated text + usage counts + stop_reason to server, server sends to client for display
 
-Token = text chunk (word/part/symbol)
-Embedding = numerical representation of word meanings
-Contextualization = meaning refinement using neighboring words
-Max_tokens = generation length limit
-Stop_reason = why model stopped generating
-</note>
+- Token = text chunk (word/part/symbol)
+- Embedding = numerical representation of word meanings
+- Contextualization = meaning refinement using neighboring words
+- Max_tokens = generation length limit
+- Stop_reason = why model stopped generating
 
-<note title="Making a Request">
+
+## Making a Request
 Making API Request to Anthropic = Process involving 4 setup steps and understanding message structure
 
 Setup Steps:
@@ -69,10 +63,12 @@ Response Access:
 - Full response = Contains metadata and nested structure
 - Text only = message.content[0].text extracts just generated text
 
-Example request structure: client.messages.create(model=model, max_tokens=1000, messages=[{"role": "user", "content": "What is quantum computing?"}])
-</note>
+Example request structure: 
+```py
+client.messages.create(model=model, max_tokens=1000, messages=[{"role": "user", "content": "What is quantum computing?"}])
+```
 
-<note title="Multi-Turn Conversations">
+## Multi-Turn Conversations
 Multi-Turn Conversations = conversations with multiple back-and-forth exchanges that maintain context.
 
 Key limitation: Anthropic API stores no messages. Each request is independent with no memory of previous exchanges.
@@ -95,10 +91,49 @@ Helper functions needed:
 - add_assistant_message(messages, text) = appends assistant response to history  
 - chat(messages) = sends message history to API and returns response
 
-Without message history = responses lack context and continuity. With complete history = Claude maintains conversation context and provides relevant follow-ups.
-</note>
+```py
+def add_user_message(messages, text):
+    user_message = {"role": "user", "content": text}
+    messages.append(user_message)
 
-<note title="System Prompts">
+def add_assistant_message(messages, text):
+    assistant_message = {"role": "assistant", "content": text}
+    messages.append(assistant_message)
+
+def chat(messages):
+    message = client.messages.create(
+        model=model,
+        max_tokens=1000,
+        messages=messages,
+    )
+    return message.content[0].text
+```
+
+Putting it all together:
+```py
+# Start with an empty message list
+messages = []
+
+# Add the initial user question
+add_user_message(messages, "Define quantum computing in one sentence")
+
+# Get Claude's response
+answer = chat(messages)
+
+# Add Claude's response to the conversation history
+add_assistant_message(messages, answer)
+
+# Add a follow-up question
+add_user_message(messages, "Write another sentence")
+
+# Get the follow-up response with full context
+final_answer = chat(messages)
+```
+
+Without message history = responses lack context and continuity. With complete history = Claude maintains conversation context and provides relevant follow-ups.
+
+
+## System Prompts
 System Prompts = technique to customize Claude's response style and tone by assigning it a specific role or behavior pattern.
 
 Implementation = pass system prompt as plain string to create function using system keyword argument.
@@ -112,9 +147,9 @@ Key principle = system prompts guide response approach, not content. Same questi
 Technical implementation = create params dictionary, conditionally add system key if prompt provided, pass params to create function with ** unpacking. Handle None case by excluding system parameter entirely.
 
 Use case example = Math tutor that gives guidance/hints rather than complete solutions, encouraging student thinking over direct answers.
-</note>
 
-<note title="Temperature">
+
+## Temperature
 Temperature = parameter (0-1) that controls randomness in Claude's text generation by influencing token selection probabilities.
 
 Text generation process: Input text → tokenization → probability assignment to possible next tokens → token selection based on probabilities → repeat.
@@ -130,9 +165,24 @@ Usage guidelines:
 Implementation: Add temperature parameter to model API calls. Higher values don't guarantee different outputs, just increase probability of variation.
 
 Key insight: Temperature directly manipulates the probability distribution of next token selection, making high-probability tokens more/less dominant in the selection process.
-</note>
 
-<note title="Response Streaming">
+```py
+def chat(messages, system=None, temperature=1.0):
+    params = {
+        "model": model,
+        "max_tokens": 1000,
+        "messages": messages,
+        "temperature": temperature
+    }
+    
+    if system:
+        params["system"] = system
+    
+    message = client.messages.create(**params)
+    return message.content[0].text
+```
+
+## Response Streaming
 Response Streaming = technique to display AI responses chunk-by-chunk as they're generated instead of waiting for complete response.
 
 Problem solved: AI responses can take 10-30 seconds. Users expect immediate feedback, not just spinners.
@@ -150,14 +200,27 @@ Event types:
 - content_block_stop/message_stop = generation complete
 
 Implementation:
-Basic: client.messages.create(stream=True) returns event iterator
-Simplified: client.messages.stream() with text_stream property extracts just text
-Final message: stream.get_final_message() assembles all chunks for storage
+- Basic: client.messages.create(stream=True) returns event iterator
+- Simplified: client.messages.stream() with text_stream property extracts just text
+- Final message: stream.get_final_message() assembles all chunks for storage
 
 Key benefits: Better UX through immediate response visibility, complete message capture for database storage.
-</note>
 
-<note title="Controlling Model Output">
+```py
+with client.messages.stream(
+    model=model,
+    max_tokens=1000,
+    messages=messages
+) as stream:
+    for text in stream.text_stream:
+        # Send each chunk to your client or print(text, end=" ")
+        pass
+    
+    # Get the complete message for database storage or logs
+    final_message = stream.get_final_message()
+```
+
+## Controlling Model Output
 **Controlling Model Output = Two key techniques beyond prompt modification**
 
 **Pre-filling Assistant Messages = Manually adding assistant message at end of conversation to steer response direction**
@@ -172,6 +235,21 @@ Key point: Claude continues from exact endpoint of pre-fill, not complete senten
 
 Example: Pre-fill "Coffee is better because" → Claude continues with justification for coffee
 
+The key thing to understand is that Claude continues from exactly where your prefilled text ends. If you write "Coffee is better because", Claude won't repeat that text - it will pick up right after "because" and complete the thought.
+
+Here's the code structure:
+```py
+messages = []
+add_user_message(messages, "Is tea or coffee better at breakfast?")
+add_assistant_message(messages, "Coffee is better because")
+answer = chat(messages)
+```
+You can steer Claude in any direction using this technique:
+
+- Favor coffee: "Coffee is better because"
+- Favor tea: "Tea is better because"
+- Take a contrarian stance: "Neither is very good because"
+
 **Stop Sequences = Force Claude to halt generation when specific string appears**
 
 How it works:
@@ -183,10 +261,40 @@ Example: Prompt "count 1 to 10" + stop sequence "five" → Output stops at "four
 
 Refinement: Stop sequence ", five" → Clean output "one, two, three, four"
 
-Both techniques provide precise control over response direction and length without changing core prompts.
-</note>
+The concept is straightforward: you provide a list of strings, and as soon as Claude generates any of those strings, it stops responding immediately. The stop sequence itself is not included in the final response.
 
-<note title="Structured Data">
+```py
+def chat(messages, system=None, temperature=1.0, stop_sequences=[]):
+    params = {
+        "model": model,
+        "max_tokens": 1000,
+        "messages": messages,
+        "temperature": temperature,
+        "stop_sequences": stop_sequences
+    }
+    
+    if system:
+        params["system"] = system
+    
+    message = client.messages.create(**params)
+    return message.content[0].text
+```
+
+```
+def chat(messages, stop_sequences=[]):
+    # Add stop_sequences to your API call parameters
+```
+Then use it like this:
+
+messages = []
+add_user_message(messages, "Count from 1 to 10")
+answer = chat(messages, stop_sequences=["5"])
+You can fine-tune exactly where the stopping occurs. If you want to avoid trailing punctuation, use a more specific stop sequence like ", 5" instead of just "5".
+
+Both techniques provide precise control over response direction and length without changing core prompts.
+
+
+## Structured Data
 Structured Data Generation = technique using assistant message prefilling + stop sequences to get raw output without Claude's natural explanatory headers/footers.
 
 Problem = Claude automatically adds markdown formatting, headers, commentary when generating JSON/code/structured content. Users often want just the raw data for copy/paste functionality.
@@ -203,9 +311,10 @@ Result = Raw structured data output with no extra formatting or commentary.
 Application = Works for any structured data type (JSON, Python code, lists, etc.), not just JSON. Use whenever you need clean, parseable output without explanatory text.
 
 Key benefit = Output can be directly used/copied without manual selection or parsing of unwanted text.
-</note>
 
-<note title="Prompt Evaluation">
+# Prompt Evaluation
+
+## Prompt Evaluation
 Prompt Engineering = techniques for writing/editing prompts to help Claude understand requests and desired responses.
 
 Prompt Evaluation = automated testing of prompts using objective metrics to measure effectiveness.
@@ -216,9 +325,9 @@ Three paths after writing a prompt:
 3. Run through evaluation pipeline for objective scoring (recommended)
 
 Key takeaway: Engineers commonly under-test prompts. Use evaluation pipelines to get objective performance scores before iterating and deploying prompts.
-</note>
 
-<note title="A Typical Eval Workflow">
+
+## A Typical Eval Workflow
 Typical Eval Workflow = 6-step iterative process for prompt improvement
 
 Step 1: Write initial prompt draft - create baseline prompt to optimize
@@ -234,9 +343,9 @@ Step 5: Grade responses - use grader system to score each response (e.g. 1-10 sc
 Step 6: Iterate - modify prompt based on scores, repeat entire process, compare versions
 
 Key points: No standard methodology exists. Many open-source/paid tools available. Can start simple with custom implementation. Grading complexity varies. Objective scoring enables systematic prompt improvement through A/B comparison.
-</note>
 
-<note title="Generating Test Datasets">
+
+## Generating Test Datasets
 Custom prompt evaluation workflow = build prompt + generate test dataset + evaluate performance
 
 Goal = AWS code assistance prompt that outputs only Python, JSON config, or regex without explanations
@@ -250,9 +359,9 @@ Generation process = prompt Claude to create test cases → use pre-filling with
 Key implementation = generate_dataset() function that sends prompt to Claude, gets structured JSON response of test tasks, saves to dataset.json file for later evaluation use
 
 Test dataset enables systematic evaluation by running prompt against multiple input scenarios to measure performance consistency.
-</note>
 
-<note title="Running the Eval">
+
+## Running the Eval
 Eval execution process = merging test cases with prompts, running through LLM, and grading outputs.
 
 Test case = individual record from dataset (JSON object).
@@ -273,9 +382,8 @@ Output format = array of objects containing Claude output, original test case, a
 Next step = implement proper grading system to replace hardcoded scores.
 
 Eval pipeline core = dataset + prompt + LLM + grader, with minimal code complexity.
-</note>
 
-<note title="Model Based Grading">
+## Model Based Grading
 Model Based Grading = evaluation system that takes model outputs and assigns objective scores (typically 1-10 scale, 10 = highest quality)
 
 Three grader types:
@@ -292,9 +400,9 @@ Implementation pattern for model graders:
 - Calculate average scores across test cases for final metric
 
 Model graders offer high flexibility but may be inconsistent. Still provides objective baseline for prompt optimization.
-</note>
 
-<note title="Code Based Grading">
+
+## Code Based Grading
 Code Based Grading = automated validation system for LLM outputs containing code, JSON, or regex
 
 Core Implementation:
@@ -318,9 +426,11 @@ Scoring System:
 - Enables measurement of both correctness and technical validity
 
 Key Limitation = requires known expected format for proper validator selection
-</note>
 
-<note title="Prompt Engineering">
+
+# Prompt Engineering Techniques
+
+## Prompt Engineering
 Prompt Engineering = improving prompts to get more reliable, higher-quality outputs from language models.
 
 Module Structure: Start with initial poor prompt → Apply prompt engineering techniques step-by-step → Evaluate improvements after each technique → Observe performance gains over time.
@@ -341,9 +451,9 @@ Key Components:
 Process: Write initial prompt → Interpolate test case inputs → Run evaluation → Apply engineering techniques → Re-evaluate → Repeat until satisfactory performance.
 
 Initial Results: Expect poor scores (example: 2.32) with basic prompts, especially when using less capable models. Scores improve as techniques are applied.
-</note>
 
-<note title="Being Clear and Direct">
+
+## Being Clear and Direct
 Being Clear and Direct = Use simple, direct language with action verbs in the first line of prompts to specify the exact task.
 
 First line importance = Most critical part of prompt that sets the foundation for AI response.
@@ -358,9 +468,9 @@ Examples:
 Key components = Action verb at start + direct task statement + expected output details.
 
 Result = Improved prompt performance (example showed score increase from 2.32 to 3.92).
-</note>
 
-<note title="Being Specific">
+
+## Being Specific
 Being Specific = adding guidelines or steps to direct model output in particular direction
 
 Two types of guidelines:
