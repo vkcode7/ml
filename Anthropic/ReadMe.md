@@ -620,7 +620,11 @@ goals and restrictions.
 ```
 This additional context helps Claude understand the reasoning behind good responses, not just the format.
 
-# Introducing Tool Use
+Examples are especially powerful because they show rather than tell. Instead of trying to describe exactly what you want in words, you demonstrate it directly. This makes your prompts much more reliable and helps Claude understand subtle requirements that might be hard to express in instructions alone.
+
+# Tool use with Claude
+
+## Introducing Tool Use
 Tool use = method for Claude to access external information beyond training data.
 
 Default limitation: Claude only knows information from training data, lacks current/real-time information.
@@ -635,10 +639,9 @@ Tool use flow:
 Weather example: User asks current weather → Claude requests weather data → Server calls weather API → Claude receives weather data → Claude provides informed weather response.
 
 Key concept: Tools enable Claude to augment responses with live/current information by orchestrating external data retrieval between Claude's requests.
-</note>
 
-<note title="Project Overview">
-**Project Overview**
+
+## Project Overview
 
 Goal = Teach Claude to set time-based reminders through tool implementation in Jupyter notebook
 
@@ -657,9 +660,9 @@ Target interaction = User: "Set reminder for doctor's appointment, week from Thu
 3. Reminder setting tool = Actually sets the reminder
 
 Implementation approach = One tool at a time, building toward multi-tool coordination
-</note>
 
-<note title="Tool Functions">
+
+## Tool Functions
 Tool Functions = Python functions executed automatically when Claude needs extra information to help users.
 
 Key characteristics:
@@ -674,19 +677,19 @@ Best practices:
 3. Meaningful error messages that guide correction
 
 Example implementation pattern:
-\`\`\`
+```py
 def get_current_datetime(date_format="%Y%m%d %H:%M:%S"):
     if not date_format:
         raise ValueError("date format cannot be empty")
     return datetime.now().strftime(date_format)
-\`\`\`
+```
 
 Tool function workflow: Claude identifies need for information → calls tool function → receives result or error → may retry with corrections if error occurred.
 
 Purpose: Extend Claude's capabilities beyond its training data by providing access to real-time information like current datetime, weather, etc.
-</note>
 
-<note title="Tool Schemas">
+
+## Tool Schemas
 Tool Schemas = JSON schema specifications that describe tool functions and their parameters for language models
 
 JSON Schema = data validation specification (not ML-specific) used to validate JSON data, adopted by ML community for tool calling
@@ -709,9 +712,9 @@ Implementation Pattern:
 - Wrap schema dictionary with ToolParam() to prevent type errors
 
 Purpose = inform Claude about available tools, required arguments, and usage context through standardized JSON validation format
-</note>
 
-<note title="Handling Message Blocks">
+
+## Handling Message Blocks
 **Tool-Enabled Claude Requests**
 
 Step 3: Making requests to Claude with tools = include tool schema in request alongside user message using \`tools\` keyword argument containing JSON schema specs.
@@ -733,9 +736,9 @@ Multi-block handling = append entire response.content (all blocks) to messages l
 Helper function updates needed = add_user_message and add_assistant_message functions must support multiple blocks instead of single text blocks only.
 
 Conversation flow = user message → assistant response with tool use block → execute tool → respond back to Claude with full history.
-</note>
 
-<note title="Sending Tool Results">
+
+## Sending Tool Results
 Tool Results = Results from executed tool functions sent back to Claude in follow-up requests.
 
 Process: Execute tool function requested by Claude → Create tool result block → Send follow-up request with full conversation history.
@@ -753,9 +756,9 @@ Follow-up Request Requirements:
 - Tool result block goes in user message, not assistant message
 
 Conversation Flow: User request → Claude assistant response (text + tool use blocks) → Server executes tool → User message with tool result block → Claude final response with integrated results.
-</note>
 
-<note title="Multi-Turn Conversations with Tools">
+
+## Multi-Turn Conversations with Tools
 Multi-Turn Tool Conversations = conversations where Claude uses multiple tools sequentially to answer a single user query.
 
 Tool Chaining Process = user asks question → Claude requests first tool → tool executed → result returned → Claude requests second tool → tool executed → result returned → Claude provides final answer.
@@ -772,9 +775,8 @@ Required Refactors:
 - text_from_message helper = extracts all text blocks from a message with multiple content blocks
 
 Key Insight = can't predict how many tools user queries will require, so system must handle arbitrary chains of tool calls automatically.
-</note>
 
-<note title="Implementing Multiple Turns">
+## Implementing Multiple Turns
 **Multiple Turns Implementation = continuously calling Claude until it stops requesting tools**
 
 **Stop Reason Field = indicates why Claude stopped generating text**
@@ -811,9 +813,9 @@ Key Insight = can't predict how many tools user queries will require, so system 
 - Each tool_use block gets separate tool_result response
 - Tool results sent back as user message containing all results
 - Process repeats until Claude provides final text-only response
-</note>
 
-<note title="Using Multiple Tools">
+
+## Using Multiple Tools
 Multiple Tools Implementation = Adding additional tools to an existing tool system after initial framework setup.
 
 Process = 3 steps: (1) Add tool schemas to RunConversation function's tools list, (2) Add conditional cases in RunTool function to handle new tool names, (3) Implement actual tool functions.
@@ -833,9 +835,9 @@ Tool Chaining = AI can use multiple tools sequentially in single conversation (e
 Message Structure = Assistant responses can contain multiple blocks: text blocks + tool use blocks in same message.
 
 Scalability = After initial framework setup, adding new tools becomes simple pattern of schema + routing + implementation.
-</note>
 
-<note title="The Batch Tool">
+
+## The Batch Tool
 Batch Tool = tool that enables Claude to run multiple tools in parallel within a single Assistant message instead of making separate sequential requests.
 
 Problem: Claude can technically send multiple tool use blocks in one message but rarely does so in practice, leading to unnecessary sequential tool calls.
@@ -852,9 +854,9 @@ Implementation:
 Mechanism: Tricks Claude into parallel tool execution by providing higher-level abstraction that manually handles what multiple tool use blocks would accomplish automatically.
 
 Result: Single request-response cycle instead of multiple sequential rounds for parallel-executable tasks.
-</note>
 
-<note title="Tools for Structured Data">
+
+## Tools for Structured Data
 Tools for Structured Data = alternative method to extract structured JSON from data sources using Claude's tool system instead of message pre-fill and stop sequences.
 
 Key differences from prompt-based extraction:
@@ -879,9 +881,9 @@ Implementation steps:
 4. Access structured data from response.content[0].input
 
 Use cases = When reliability more important than simplicity. Prompt-based methods better for quick/simple extractions, tools better for complex/reliable extractions.
-</note>
 
-<transcript title="Fine Grained Tool Calling">
+
+## Fine Grained Tool Calling
 Tool Streaming = streaming API responses while using tools with Claude
 
 Key Components:
@@ -911,10 +913,10 @@ Trade-offs:
 Use Cases:
 - Fine-grained useful for immediate UI updates or early processing of tool arguments
 - Default sufficient when validation delays acceptable
-</transcript>
 
 
-<note title="The Text Edit Tool">
+
+## The Text Edit Tool
 Text Editor Tool = built-in Claude tool for file/text operations (read, write, create, replace, undo files/directories)
 
 Key characteristics:
@@ -942,9 +944,9 @@ Use cases:
 - Multi-file project manipulation
 
 Benefits = approximates fancy code editor capabilities through API calls rather than GUI interaction.
-</note>
 
-<note title="The Web Search Tool">
+
+## The Web Search Tool
 Web Search Tool = built-in Claude tool for searching web to find up-to-date/specialized information for user questions
 
 Implementation = no custom code needed, Claude handles search execution automatically
@@ -972,9 +974,9 @@ UI Rendering Pattern:
 - Highlight citations with source attribution (domain, title, URL, quoted text)
 
 Use Case Example: Restricting to NIH.gov for medical/exercise advice ensures scientifically-backed information vs generic web content.
-</note>
 
-<note title="Introducing Retrieval Augmented Generation">
+
+# Introducing Retrieval Augmented Generation
 RAG = Retrieval Augmented Generation technique for querying large documents using language models.
 
 Problem: How to extract specific information from large documents (100-1000+ pages) using Claude without hitting context limits.
@@ -993,9 +995,9 @@ RAG downsides: More complexity, requires preprocessing, needs search mechanism t
 Key challenge: Defining relevance and optimal chunking strategy for specific use cases.
 
 RAG trades simplicity for scalability and efficiency but requires careful implementation and evaluation.
-</note>
 
-<note title="Text Chunking Strategies">
+
+## Text Chunking Strategies
 Text Chunking Strategies = process of dividing documents into smaller pieces for RAG pipelines
 
 Core Problem: Chunking quality directly impacts RAG performance. Poor chunking leads to irrelevant context retrieval (e.g., medical "bug" text retrieved for software engineering query about bugs).
@@ -1025,9 +1027,9 @@ Key Implementation Notes:
 - Strategy choice depends on document type guarantees and use case requirements
 
 Rule: No universal best chunking method - depends on document structure guarantees and specific use case.
-</note>
 
-<note title="Text Embeddings">
+
+## Text Embeddings
 Text Embeddings = numerical representation of text meaning generated by embedding models
 
 Embedding Model = takes text input, outputs long list of numbers (range -1 to +1)
@@ -1041,9 +1043,9 @@ RAG Pipeline Process = extract text chunks → user submits query → find relat
 Implementation = Anthropic recommends Voyage AI for embedding generation. Requires separate account/API key. Free to start, easy integration via SDK.
 
 Key Insight = Embeddings enable semantic similarity matching rather than keyword matching, allowing better understanding of text relationships for retrieval tasks.
-</note>
 
-<note title="The Full RAG Flow">
+
+## The Full RAG Flow
 RAG Flow = 7-step process combining text chunking, embeddings, and vector search to retrieve relevant context for LLM queries.
 
 Step 1: Text Chunking = Split source documents into separate text pieces
@@ -1060,9 +1062,9 @@ Key Math Concepts:
 - Vector Database = performs similarity calculations to find closest matching embeddings
 
 Process Flow: Pre-processing (steps 1-4) → User Query → Real-time retrieval (steps 5-7) → LLM Response
-</note>
 
-<note title="Implementing the Rag Flow">
+
+## Implementing the Rag Flow
 RAG Flow Implementation = practical walkthrough of 5-step retrieval-augmented generation process
 
 Step 1: Text Chunking = split document into sections using chunk_by_section function on report.MD file
@@ -1081,9 +1083,8 @@ Key Components:
 - Metadata Storage = storing original text content alongside embeddings enables meaningful retrieval
 
 Workflow complete but has limitations requiring further improvements.
-</note>
 
-<note title="BM25 Lexical Search">
+## BM25 Lexical Search
 BM25 = Best Match 25, a lexical search algorithm commonly used in RAG pipelines to complement semantic search.
 
 Problem with semantic search alone = Can miss exact term matches, returning irrelevant results even when specific terms appear frequently in certain documents.
@@ -1103,9 +1104,9 @@ BM25 advantages = Better at finding exact term matches, prioritizes documents co
 Implementation = Both semantic and lexical search systems use similar APIs (add_document, search functions) making them easy to combine.
 
 Next step = Merge results from both search systems to get benefits of semantic understanding plus exact term matching.
-</note>
 
-<note title="A Multi-Index Rag Pipeline">
+
+## A Multi-Index Rag Pipeline
 Multi-Index RAG Pipeline = system combining semantic search (vector index) and lexical search (BM25 index) for improved retrieval accuracy.
 
 Key Components:
@@ -1124,9 +1125,9 @@ Benefits:
 - Better handling of edge cases where single method fails
 
 Implementation pattern allows multiple search methodologies to work together while maintaining separate, isolated index classes.
-</note>
 
-<note title="Reranking Results">
+
+## Reranking Results
 Reranking = post-processing step that uses LLM to reorder search results by relevance after initial retrieval.
 
 Process: Run vector + BM25 search → merge results → pass to LLM with prompt asking to rank documents by relevance → get reordered results.
@@ -1136,9 +1137,8 @@ Implementation details: Use document IDs instead of full text for efficiency. LL
 Tradeoffs: Increases search accuracy by leveraging LLM's understanding of semantic relevance. Increases latency due to additional LLM call. Particularly effective when initial retrieval methods miss nuanced query intent (e.g., "ENG team" vs "engineering team").
 
 Example improvement: Query "What did engineering team do with incident 2023?" correctly prioritized software engineering section over cybersecurity section after reranking, despite hybrid search initially ranking it lower.
-</note>
 
-<note title="Contextual Retrieval">
+## Contextual Retrieval
 Contextual Retrieval = technique to improve RAG pipeline accuracy by adding context to document chunks before embedding.
 
 Problem: When documents are split into chunks, individual chunks lose context from the original document, reducing retrieval accuracy.
@@ -1160,9 +1160,9 @@ Large Document Handling: If source document too large for single prompt, use sel
 Implementation: add_context function takes text chunk + source text, generates context via LLM, concatenates context with original chunk, returns contextualized version.
 
 Benefit: Chunks retain ties to larger document structure and cross-references, improving retrieval accuracy for complex documents with interconnected sections.
-</note>
 
-<note title="Extended Thinking">
+
+## Extended Thinking
 Extended Thinking = Claude feature that allows reasoning time before generating final response
 
 Key mechanics:
@@ -1188,9 +1188,9 @@ Special cases:
 Implementation:
 - Set thinking=true and thinking_budget parameter
 - Ensure max_tokens > thinking_budget for adequate response generation capacity
-</note>
 
-<note title="Image Support">
+
+## Image Support
 Claude Vision Capabilities = ability to process images within user messages for analysis, comparison, counting, and description tasks.
 
 Image Limitations:
@@ -1213,9 +1213,9 @@ Example Use Case = automated fire risk assessment from satellite imagery analyzi
 Implementation = base64 encode image data, create message with image block (type: image, source: base64, media_type, data) followed by text block containing detailed prompt instructions.
 
 Key Takeaway = image accuracy depends entirely on prompt sophistication, not just image quality.
-</note>
 
-<note title="PDF Support">
+
+## PDF Support
 PDF Support in Claude:
 
 Claude can read PDF files directly using similar code to image processing. 
@@ -1230,9 +1230,9 @@ Claude PDF capabilities = read text + images + charts + tables + mixed content e
 PDF processing = one-stop solution for comprehensive document analysis
 
 Usage pattern = same as image input but with document-specific parameters
-</note>
 
-<note title="Citations">
+
+## Citations
 Citations = feature allowing Claude to reference source documents and show where information comes from
 
 Citation types:
@@ -1251,9 +1251,9 @@ Purpose = transparency for users to verify Claude's information sources and chec
 UI benefit = enables citation popups/overlays showing source document, page numbers, and exact cited text when users hover over referenced content
 
 Key use case = ensuring users can investigate how Claude builds responses from source materials rather than appearing to speak from memory alone
-</note>
 
-<note title="Prompt Caching">
+
+# Prompt Caching
 Prompt Caching = feature that speeds up Claude's responses and reduces text generation costs by reusing computational work from previous requests.
 
 Normal request flow: User sends message → Claude processes input (creates internal data structures, performs calculations) → Claude generates output → Claude discards all processing work → Ready for next request.
