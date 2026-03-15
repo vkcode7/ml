@@ -297,7 +297,7 @@ Both techniques provide precise control over response direction and length witho
 ## Structured Data
 Structured Data Generation = technique using assistant message prefilling + stop sequences to get raw output without Claude's natural explanatory headers/footers.
 
-Problem = Claude automatically adds markdown formatting, headers, commentary when generating JSON/code/structured content. Users often want just the raw data for copy/paste functionality.
+Problem = Claude automatically adds markdown formatting, headers, commentary when generating JSON/code/structured content such as ```json .... ```. Users often want just the raw data for copy/paste functionality.
 
 Solution Pattern:
 1. User message = request for structured data
@@ -311,6 +311,32 @@ Result = Raw structured data output with no extra formatting or commentary.
 Application = Works for any structured data type (JSON, Python code, lists, etc.), not just JSON. Use whenever you need clean, parseable output without explanatory text.
 
 Key benefit = Output can be directly used/copied without manual selection or parsing of unwanted text.
+
+The Solution: Assistant Message Prefilling + Stop Sequences
+
+You can combine assistant message prefilling with stop sequences to get exactly the content you want. Here's how it works:
+```py
+messages = []
+
+add_user_message(messages, "Generate a very short event bridge rule as json")
+add_assistant_message(messages, "```json")
+
+text = chat(messages, stop_sequences=["```"])
+```
+This technique works by:
+
+- The user message tells Claude what to generate
+- The prefilled assistant message makes Claude think it already started a markdown code block
+- Claude continues by writing just the JSON content
+- When Claude tries to close the code block with ```, the stop sequence immediately ends generation
+
+The result is clean JSON with no extra formatting
+```py
+import json
+
+# Clean up and parse the JSON
+clean_json = json.loads(text.strip()) #no need to check for json markdown tag
+```
 
 # Prompt Evaluation
 
