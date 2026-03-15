@@ -338,6 +338,11 @@ import json
 clean_json = json.loads(text.strip()) #no need to check for json markdown tag
 ```
 
+# Prompt Engineering vs Prompt Evaluation
+Prompt engineering is your toolkit for crafting effective prompts. It includes techniques like:
+
+Prompt evaluation takes a different approach. Instead of focusing on how to write prompts, it's about measuring their effectiveness through automated testing.
+
 # Prompt Evaluation
 
 ## Prompt Evaluation
@@ -351,7 +356,6 @@ Three paths after writing a prompt:
 3. Run through evaluation pipeline for objective scoring (recommended)
 
 Key takeaway: Engineers commonly under-test prompts. Use evaluation pipelines to get objective performance scores before iterating and deploying prompts.
-
 
 ## A Typical Eval Workflow
 Typical Eval Workflow = 6-step iterative process for prompt improvement
@@ -408,6 +412,71 @@ Output format = array of objects containing Claude output, original test case, a
 Next step = implement proper grading system to replace hardcoded scores.
 
 Eval pipeline core = dataset + prompt + LLM + grader, with minimal code complexity.
+
+### Here is the flow:
+#### Building the Core Functions
+The evaluation pipeline consists of three main functions, each with a specific responsibility. Let's start with the simplest one - the function that handles individual prompts.
+
+#### The run_prompt Function:
+This function takes a test case and merges it with our prompt template:
+```py
+def run_prompt(test_case):
+    """Merges the prompt and test case input, then returns the result"""
+    prompt = f"""
+Please solve the following task:
+
+{test_case["task"]}
+"""
+    
+    messages = []
+    add_user_message(messages, prompt)
+    output = chat(messages)
+    return output
+```
+Right now, we're keeping the prompt extremely simple. We're not including any formatting instructions, so Claude will likely return more verbose output than we need. We'll refine this later as we iterate on our prompt design.
+
+#### The run_test_case Function: 
+This function orchestrates running a single test case and grading the result:
+```py
+def run_test_case(test_case):
+    """Calls run_prompt, then grades the result"""
+    output = run_prompt(test_case)
+    
+    # TODO - Grading
+    score = 10
+    
+    return {
+        "output": output,
+        "test_case": test_case,
+        "score": score
+    }
+```
+For now, we're using a hardcoded score of 10. The grading logic is where we'll spend significant time in upcoming sections, but this placeholder lets us test the overall pipeline.
+
+#### The run_eval Function: 
+This function coordinates the entire evaluation process:
+```py
+def run_eval(dataset):
+    """Loads the dataset and calls run_test_case with each case"""
+    results = []
+    
+    for test_case in dataset:
+        result = run_test_case(test_case)
+        results.append(result)
+    
+    return results
+```
+This function processes every test case in our dataset and collects all the results into a single list.
+
+#### Running the Evaluation: 
+To execute our evaluation pipeline, we load our dataset and run it through our functions:
+```py
+with open("dataset.json", "r") as f:
+    dataset = json.load(f)
+
+results = run_eval(dataset)
+```
+
 
 ## Model Based Grading
 Model Based Grading = evaluation system that takes model outputs and assigns objective scores (typically 1-10 scale, 10 = highest quality)
