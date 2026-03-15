@@ -413,72 +413,13 @@ Next step = implement proper grading system to replace hardcoded scores.
 
 Eval pipeline core = dataset + prompt + LLM + grader, with minimal code complexity.
 
-### Here is the flow:
-#### Building the Core Functions
-The evaluation pipeline consists of three main functions, each with a specific responsibility. Let's start with the simplest one - the function that handles individual prompts.
 
-#### The run_prompt Function:
-This function takes a test case and merges it with our prompt template:
-```py
-def run_prompt(test_case):
-    """Merges the prompt and test case input, then returns the result"""
-    prompt = f"""
-Please solve the following task:
-
-{test_case["task"]}
-"""
-    
-    messages = []
-    add_user_message(messages, prompt)
-    output = chat(messages)
-    return output
-```
-Right now, we're keeping the prompt extremely simple. We're not including any formatting instructions, so Claude will likely return more verbose output than we need. We'll refine this later as we iterate on our prompt design.
-
-#### The run_test_case Function: 
-This function orchestrates running a single test case and grading the result:
-```py
-def run_test_case(test_case):
-    """Calls run_prompt, then grades the result"""
-    output = run_prompt(test_case)
-    
-    # TODO - Grading
-    score = 10
-    
-    return {
-        "output": output,
-        "test_case": test_case,
-        "score": score
-    }
-```
-For now, we're using a hardcoded score of 10. The grading logic is where we'll spend significant time in upcoming sections, but this placeholder lets us test the overall pipeline.
-
-#### The run_eval Function: 
-This function coordinates the entire evaluation process:
-```py
-def run_eval(dataset):
-    """Loads the dataset and calls run_test_case with each case"""
-    results = []
-    
-    for test_case in dataset:
-        result = run_test_case(test_case)
-        results.append(result)
-    
-    return results
-```
-This function processes every test case in our dataset and collects all the results into a single list.
-
-#### Running the Evaluation: 
-To execute our evaluation pipeline, we load our dataset and run it through our functions:
-```py
-with open("dataset.json", "r") as f:
-    dataset = json.load(f)
-
-results = run_eval(dataset)
-```
+Check 001_prompt_evals_complete.ipynb for implementation level details
 
 
 ## Model Based Grading
+Check Check 001_prompt_evals_complete.ipynb for implementation level details
+
 Model Based Grading = evaluation system that takes model outputs and assigns objective scores (typically 1-10 scale, 10 = highest quality)
 
 Three grader types:
@@ -522,6 +463,37 @@ Scoring System:
 
 Key Limitation = requires known expected format for proper validator selection
 
+```py
+def validate_json(text):
+    try:
+        json.loads(text.strip())
+        return 10
+    except json.JSONDecodeError:
+        return 0
+
+def validate_python(text):
+    try:
+        ast.parse(text.strip())
+        return 10
+    except SyntaxError:
+        return 0
+
+def validate_regex(text):
+    try:
+        re.compile(text.strip())
+        return 10
+    except re.error:
+        return 0
+```
+
+Combine Scores:
+```py
+model_grade = grade_by_model(test_case, output)
+model_score = model_grade["score"]
+syntax_score = grade_syntax(output, test_case)
+
+score = (model_score + syntax_score) / 2
+```
 
 # Prompt Engineering Techniques
 
