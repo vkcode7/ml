@@ -66,18 +66,38 @@ Implementation = Anthropic recommends Voyage AI for embedding generation. Requir
 
 Key Insight = Embeddings enable semantic similarity matching rather than keyword matching, allowing better understanding of text relationships for retrieval tasks.
 
+**VoyageAI for Embeddings** <br>
+Since Anthropic doesn't currently provide embedding generation, the recommended provider is VoyageAI. You'll need to:
+
+- Sign up for a separate VoyageAI account
+- Get an API key (free to get started)
+- Add the key to your environment variables
+
+Then set up the client and create a function to generate embeddings:
+```py
+from dotenv import load_dotenv
+import voyageai
+
+load_dotenv()
+client = voyageai.Client()
+
+def generate_embedding(text, model="voyage-3-large", input_type="query"):
+    result = client.embed([text], model=model, input_type=input_type)
+    return result.embeddings[0]
+```
+
 Refer: 002_embeddings notebook
 
 ## The Full RAG Flow
 RAG Flow = 7-step process combining text chunking, embeddings, and vector search to retrieve relevant context for LLM queries.
 
-Step 1: Text Chunking = Split source documents into separate text pieces
-Step 2: Generate Embeddings = Convert text chunks into numerical vectors using embedding models
-Step 3: Normalization = Scale vector magnitudes to 1.0 (handled automatically by embedding APIs)
-Step 4: Vector Database Storage = Store embeddings in specialized database optimized for numerical vector operations
-Step 5: Query Processing = Convert user question into embedding using same model
-Step 6: Similarity Search = Find most similar stored embeddings using cosine similarity calculation
-Step 7: Prompt Assembly = Combine user question with retrieved relevant text chunks, send to LLM
+- Step 1: Text Chunking = Split source documents into separate text pieces
+- Step 2: Generate Embeddings = Convert text chunks into numerical vectors using embedding models
+- Step 3: Normalization = Scale vector magnitudes to 1.0 (handled automatically by embedding APIs)
+- Step 4: Vector Database Storage = Store embeddings in specialized database optimized for numerical vector operations
+- Step 5: Query Processing = Convert user question into embedding using same model
+- Step 6: Similarity Search = Find most similar stored embeddings using cosine similarity calculation
+- Step 7: Prompt Assembly = Combine user question with retrieved relevant text chunks, send to LLM
 
 Key Math Concepts:
 - Cosine Similarity = cosine of angle between vectors, returns values -1 to 1, closer to 1 means more similar
@@ -95,6 +115,11 @@ Step 2: Embedding Generation = create vector representations for each chunk usin
 
 Step 3: Vector Store Population = create vector index instance, loop through chunk-embedding pairs using zip(), store each pair with store.add_vector(embedding, {content: chunk}). Store original text with embeddings for meaningful retrieval results.
 
+```text
+Why Store the Original Text?
+When we query our vector database, getting back just the embedding numbers isn't useful. We need the actual text that was used to generate those embeddings. That's why we include the original chunk text (or at least a reference to it) alongside each embedding in our database.
+```
+
 Step 4: Query Processing = user asks question "what did software engineering department do last year", generate embedding for user query
 
 Step 5: Similarity Search = use store.search(user_embedding, 2) to find 2 most relevant chunks, returns results with cosine distances (0.71 for section two, 0.72 for methodology section)
@@ -105,6 +130,8 @@ Key Components:
 - Metadata Storage = storing original text content alongside embeddings enables meaningful retrieval
 
 Workflow complete but has limitations requiring further improvements.
+
+Refer: 003_vectordb notebook
 
 ## BM25 Lexical Search
 BM25 = Best Match 25, a lexical search algorithm commonly used in RAG pipelines to complement semantic search.
