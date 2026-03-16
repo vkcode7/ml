@@ -568,11 +568,15 @@ The response will contain a tool use block with your structured data in the inpu
 structured_data = response.content[0].input
 ```
 
-**When to Use Each Approach?**<br>
+**When to Use Each Approach?** <br>
 Choose prompt-based structured output when you need something quick and simple. Use tools when you need guaranteed reliability and can handle the extra setup complexity. Both techniques are valuable depending on your specific use case and requirements.
+
+**Refer: 002_structured_data_completed.ipynb**
 
 ## Fine Grained Tool Calling
 Tool Streaming = streaming API responses while using tools with Claude
+
+If you need faster, more granular streaming - perhaps to show users immediate updates or start processing partial results quickly - you can enable fine-grained tool calling.
 
 Key Components:
 - Standard streaming returns content_block_delta events
@@ -602,6 +606,34 @@ Use Cases:
 - Fine-grained useful for immediate UI updates or early processing of tool arguments
 - Default sufficient when validation delays acceptable
 
+Fine-grained tool calling does one main thing: it disables JSON validation on the API side. This means:
+
+- You get chunks as soon as Claude generates them
+- No buffering delays between top-level keys
+- More traditional streaming behavior
+- Critical: JSON validation is disabled - your code must handle invalid JSON
+
+Enable it by adding fine_grained=True to your API call:
+```py
+run_conversation(
+    messages, 
+    tools=[save_article_schema], 
+    fine_grained=True
+)
+```
+
+When to Use Fine-Grained Tool Calling?
+
+Consider enabling fine-grained tool calling when:
+
+- You need to show users real-time progress on tool argument generation
+- You want to start processing partial tool results as quickly as possible
+- The buffering delays negatively impact your user experience
+- You're comfortable implementing robust JSON error handling
+
+For most applications, the default behavior with validation is perfectly adequate. But when you need that extra responsiveness, fine-grained tool calling gives you the control to get chunks as fast as Claude can generate them.
+
+**Refer: 003_tool_streaming_completed.ipynb**
 
 ## The Text Edit Tool
 Text Editor Tool = built-in Claude tool for file/text operations (read, write, create, replace, undo files/directories)
