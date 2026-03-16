@@ -664,6 +664,16 @@ Use cases:
 
 Benefits = approximates fancy code editor capabilities through API calls rather than GUI interaction.
 
+Why Use the Text Editor Tool?
+
+You might wonder why this tool exists when modern code editors already have AI assistants built in. The text editor tool becomes valuable in scenarios where:
+
+- You're building applications that need to programmatically edit files
+- You're working in environments without access to full-featured code editors
+- You want to integrate file editing capabilities directly into your Claude-powered applications
+- Essentially, the text editor tool lets you replicate much of the functionality of a fancy AI-powered code editor within your own applications, giving you fine-grained control over how Claude interacts with your file system.
+
+**Refer: 005_text_editor_tool.ipynb**
 
 ## The Web Search Tool
 Web Search Tool = built-in Claude tool for searching web to find up-to-date/specialized information for user questions
@@ -693,3 +703,5 @@ UI Rendering Pattern:
 - Highlight citations with source attribution (domain, title, URL, quoted text)
 
 Use Case Example: Restricting to NIH.gov for medical/exercise advice ensures scientifically-backed information vs generic web content.
+
+**Refer: 006_web_search_complete.ipynb**
