@@ -16,6 +16,7 @@ Weather example: User asks current weather → Claude requests weather data → 
 
 Key concept: Tools enable Claude to augment responses with live/current information by orchestrating external data retrieval between Claude's requests.
 
+Tool use transforms Claude from a static knowledge base into a dynamic assistant that can work with live data. This opens up possibilities for building applications that need current information, whether that's weather data, stock prices, database queries, or any other real-time information your users might need.
 
 ## Project Overview
 
@@ -37,6 +38,7 @@ Target interaction = User: "Set reminder for doctor's appointment, week from Thu
 
 Implementation approach = One tool at a time, building toward multi-tool coordination
 
+This project demonstrates a key principle of working with AI: when the model has limitations, we extend its capabilities through tools rather than trying to work around those limitations in our prompts.
 
 ## Tool Functions
 Tool Functions = Python functions executed automatically when Claude needs extra information to help users.
@@ -64,6 +66,7 @@ Tool function workflow: Claude identifies need for information → calls tool fu
 
 Purpose: Extend Claude's capabilities beyond its training data by providing access to real-time information like current datetime, weather, etc.
 
+Creating the function is just the first step. Next, you'll need to write a JSON schema that describes the function to Claude, then integrate it into your chat system. This tool function approach gives Claude powerful capabilities while keeping your code organized and maintainable.
 
 ## Tool Schemas
 Tool Schemas = JSON schema specifications that describe tool functions and their parameters for language models
@@ -89,19 +92,82 @@ Implementation Pattern:
 
 Purpose = inform Claude about available tools, required arguments, and usage context through standardized JSON validation format
 
+Once Claude generates your schema, copy it into your code file. Here's a good naming pattern to follow:
+```py
+def get_current_datetime(date_format="%Y-%m-%d %H:%M:%S"):
+    if not date_format:
+        raise ValueError("date_format cannot be empty")
+    return datetime.now().strftime(date_format)
+
+get_current_datetime_schema = {
+    "name": "get_current_datetime",
+    "description": "Returns the current date and time formatted according to the specified format",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "date_format": {
+                "type": "string",
+                "description": "A string specifying the format of the returned datetime. Uses Python's strftime format codes.",
+                "default": "%Y-%m-%d %H:%M:%S"
+            }
+        },
+        "required": []
+    }
+}
+```
+
+**Adding Type Safety**
+For better type checking, import and use the ToolParam type from the Anthropic library:
+```
+from anthropic.types import ToolParam
+
+get_current_datetime_schema = ToolParam({
+    "name": "get_current_datetime",
+    "description": "Returns the current date and time formatted according to the specified format",
+    # ... rest of schema
+})
+```
+Use the pattern of function_name followed by function_name_schema to keep your schemas organized and easy to match with their corresponding functions.
 
 ## Handling Message Blocks
 **Tool-Enabled Claude Requests**
 
 Step 3: Making requests to Claude with tools = include tool schema in request alongside user message using \`tools\` keyword argument containing JSON schema specs.
 
+**Making Tool-Enabled API Calls**
+
+To enable Claude to use tools, you need to include a tools parameter in your API call. Here's how to structure the request:
+```py
+messages = []
+messages.append({
+    "role": "user",
+    "content": "What is the exact time, formatted as HH:MM:SS?"
+})
+
+response = client.messages.create(
+    model=model,
+    max_tokens=1000,
+    messages=messages,
+    tools=[get_current_datetime_schema],
+)
+```
+The tools parameter takes a list of JSON schemas that describe the available functions Claude can call.
+
 **Multi-Block Messages**
 
 Content structure change = messages now contain multiple blocks instead of just text blocks.
 
-Tool response format = assistant message with:
-- Text block = user-facing explanation 
-- Tool use block = contains function name + arguments for tool execution
+A multi-block message typically contains:
+
+- Text Block - Human-readable text explaining what Claude is doing (like "I can help you find out the current time. Let me find that information for you")
+- ToolUse Block - Instructions for your code about which tool to call and what parameters to use
+
+The ToolUse block includes:
+
+- An ID for tracking the tool call
+- The name of the function to call (like "get_current_datetime")
+- Input parameters formatted as a dictionary
+- The type designation "tool_use"
 
 **Message History Management**
 
@@ -113,6 +179,14 @@ Helper function updates needed = add_user_message and add_assistant_message func
 
 Conversation flow = user message → assistant response with tool use block → execute tool → respond back to Claude with full history.
 
+Here's how to properly append a multi-block assistant message to your conversation history:
+```py
+messages.append({
+    "role": "assistant",
+    "content": response.content
+})
+```
+This preserves both the text block and the tool use block, which is crucial for maintaining the conversation context when you make subsequent API calls.
 
 ## Sending Tool Results
 Tool Results = Results from executed tool functions sent back to Claude in follow-up requests.
@@ -133,6 +207,141 @@ Follow-up Request Requirements:
 
 Conversation Flow: User request → Claude assistant response (text + tool use blocks) → Server executes tool → User message with tool result block → Claude final response with integrated results.
 
+The tool usage process follows this pattern:
+
+- Send user message with tool schema to Claude
+- Receive assistant message with text block and tool use block
+- Extract tool information and execute the actual function
+- Send tool result back to Claude along with complete conversation history
+- Receive final response from Claude
+
+Each step requires careful handling of the message structure to ensure Claude has the full context it needs to provide accurate responses.
+
+## Sending tool results
+After Claude requests a tool call, you need to execute the function and send the results back. This completes the tool use workflow by providing Claude with the information it requested.
+
+When Claude responds with a tool use block, you extract the input parameters and call your function. Here's how to access the tool parameters:
+```py
+response.content[1].input
+```
+This gives you a dictionary of the arguments Claude wants to pass to your function. Since your function expects keyword arguments rather than a dictionary, you use Python's 
+
+unpacking syntax:
+```
+result = get_current_datetime(**response.content[1].input)
+```
+
+**Building the Follow-up Request:**
+Your follow-up request to Claude must include the complete conversation history plus the new tool result. Here's the structure:
+```py
+messages.append({
+    "role": "user",
+    "content": [{
+        "type": "tool_result",
+        "tool_use_id": response.content[1].id,
+        "content": result,
+        "is_error": False
+    }]
+})
+```
+The complete message history now contains:
+
+- Original user message
+- Assistant message with tool use block
+- User message with tool result block
+
+**Making the Final Request:**
+When sending the follow-up request, you must still include the tool schema even though you're not expecting Claude to make another tool call. Claude needs the schema to understand the tool references in your conversation history.
+```py
+client.messages.create(
+    model=model,
+    max_tokens=1000,
+    messages=messages,
+    tools=[get_current_datetime_schema]
+)
+```
+Claude will then respond with a final message that incorporates the tool results into a natural response for the user. The tool use workflow is now complete - you've successfully enabled Claude to access real-time information through your custom function.
+
+## Example using OpenAI
+```py
+import json
+from datetime import datetime
+from openai import OpenAI
+
+client = OpenAI(api_key="your-api-key")
+
+# --- Your function ---
+def get_current_datetime(date_format="%Y-%m-%d %H:%M:%S"):
+    if not date_format:
+        raise ValueError("date_format cannot be empty")
+    return datetime.now().strftime(date_format)
+
+# --- Tool definition for OpenAI ---
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_current_datetime",
+            "description": "Returns the current date and time in the specified format.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date_format": {
+                        "type": "string",
+                        "description": "A strftime format string. Defaults to '%Y-%m-%d %H:%M:%S'.",
+                    }
+                },
+                "required": [],  # date_format is optional
+            },
+        },
+    }
+]
+
+# --- Step 1: Send user message + tools to OpenAI ---
+messages = [{"role": "user", "content": "What is the current date and time?"}]
+
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+)
+
+response_message = response.choices[0].message
+
+# --- Step 2: Check if OpenAI wants to call a tool ---
+if response_message.tool_calls:
+    for tool_call in response_message.tool_calls:
+        if tool_call.function.name == "get_current_datetime":
+            # Parse arguments
+            args = json.loads(tool_call.function.arguments)
+            date_format = args.get("date_format", "%Y-%m-%d %H:%M:%S")
+
+            # Call your actual function
+            result = get_current_datetime(date_format)
+            print(f"Function returned: {result}")
+
+            # --- Step 3: Send result back to OpenAI ---
+            messages.append(response_message)  # append assistant's response
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": result,
+            })
+
+    # --- Step 4: Get final response from OpenAI ---
+    final_response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+    )
+    print("Assistant:", final_response.choices[0].message.content)
+```
+
+**Sample Output:**
+```
+Function returned: 2026-03-15 10:45:30
+Assistant: The current date and time is March 15, 2026, at 10:45:30 AM.
+```
 
 ## Multi-Turn Conversations with Tools
 Multi-Turn Tool Conversations = conversations where Claude uses multiple tools sequentially to answer a single user query.
@@ -143,6 +352,24 @@ Example Flow = user asks "what day is 103 days from today" → Claude calls get_
 
 Implementation Pattern = while loop that continues calling Claude until no more tool requests, checking each response for tool_use blocks.
 
+**Building a Conversation Loop:**
+To handle this pattern, you need a conversation loop that continues until Claude stops requesting tools:
+```py
+def run_conversation(messages):
+    while True:
+        response = chat(messages)
+        
+        add_user_message(messages, response)
+        
+        # Pseudo code
+        if response isn't asking for a tool:
+            break
+            
+        tool_result_blocks = run_tools(response)
+        add_user_message(tool_result_blocks)
+        
+    return messages
+```
 run_conversation Function = takes initial messages, loops through Claude calls, executes requested tools, adds results to conversation, continues until final response.
 
 Required Refactors:
@@ -158,6 +385,27 @@ Key Insight = can't predict how many tools user queries will require, so system 
 **Stop Reason Field = indicates why Claude stopped generating text**
 - stop_reason = "tool_use" means Claude wants to call a tool
 - Other values exist but tool_use is most commonly checked
+
+**Detecting Tool Requests:**
+The key to knowing whether Claude wants to use a tool lies in the stop_reason field of the response message. When Claude decides it needs to call a tool, this field gets set to "tool_use". This gives us a clean way to check if we need to continue the conversation loop:
+
+The main conversation function follows a simple pattern:
+```py
+def run_conversation(messages):
+    while True:
+        response = chat(messages, tools=[get_current_datetime_schema])
+        add_assistant_message(messages, response)
+        print(text_from_message(response))
+        
+        if response.stop_reason != "tool_use":
+            break
+            
+        tool_results = run_tools(response)
+        add_user_message(messages, tool_results)
+    
+    return messages
+```
+This loop continues until Claude provides a final answer without requesting any tools.
 
 **run_conversation Function = main loop that:**
 1. Calls Claude with messages + available tools
@@ -179,6 +427,18 @@ Key Insight = can't predict how many tools user queries will require, so system 
 - Uses if statements to match tool names to functions
 - Executes appropriate tool function
 - Scalable for adding multiple tools
+
+**Scalable Tool Routing**
+To support multiple tools, create a routing function that maps tool names to their implementations:
+```py
+def run_tool(tool_name, tool_input):
+    if tool_name == "get_current_datetime":
+        return get_current_datetime(**tool_input)
+    elif tool_name == "another_tool":
+        return another_tool(**tool_input)
+    # Add more tools as needed
+```
+This approach makes it easy to add new tools without modifying the core conversation logic.
 
 **Error Handling = try/except blocks around tool execution:**
 - Success: is_error=false, content=tool_output
@@ -212,6 +472,7 @@ Message Structure = Assistant responses can contain multiple blocks: text blocks
 
 Scalability = After initial framework setup, adding new tools becomes simple pattern of schema + routing + implementation.
 
+**Check 001_tool_009.ipynb for code till this point**
 
 ## The Batch Tool
 Batch Tool = tool that enables Claude to run multiple tools in parallel within a single Assistant message instead of making separate sequential requests.
