@@ -116,7 +116,7 @@ get_current_datetime_schema = {
 }
 ```
 
-**Adding Type Safety**
+**Adding Type Safety** <br>
 For better type checking, import and use the ToolParam type from the Anthropic library:
 ```
 from anthropic.types import ToolParam
@@ -231,7 +231,7 @@ unpacking syntax:
 result = get_current_datetime(**response.content[1].input)
 ```
 
-**Building the Follow-up Request:**
+**Building the Follow-up Request:** <br>
 Your follow-up request to Claude must include the complete conversation history plus the new tool result. Here's the structure:
 ```py
 messages.append({
@@ -250,7 +250,7 @@ The complete message history now contains:
 - Assistant message with tool use block
 - User message with tool result block
 
-**Making the Final Request:**
+**Making the Final Request:** <br>
 When sending the follow-up request, you must still include the tool schema even though you're not expecting Claude to make another tool call. Claude needs the schema to understand the tool references in your conversation history.
 ```py
 client.messages.create(
@@ -352,7 +352,7 @@ Example Flow = user asks "what day is 103 days from today" → Claude calls get_
 
 Implementation Pattern = while loop that continues calling Claude until no more tool requests, checking each response for tool_use blocks.
 
-**Building a Conversation Loop:**
+**Building a Conversation Loop:**<br>
 To handle this pattern, you need a conversation loop that continues until Claude stops requesting tools:
 ```py
 def run_conversation(messages):
@@ -386,7 +386,7 @@ Key Insight = can't predict how many tools user queries will require, so system 
 - stop_reason = "tool_use" means Claude wants to call a tool
 - Other values exist but tool_use is most commonly checked
 
-**Detecting Tool Requests:**
+**Detecting Tool Requests:**<br>
 The key to knowing whether Claude wants to use a tool lies in the stop_reason field of the response message. When Claude decides it needs to call a tool, this field gets set to "tool_use". This gives us a clean way to check if we need to continue the conversation loop:
 
 The main conversation function follows a simple pattern:
@@ -428,7 +428,7 @@ This loop continues until Claude provides a final answer without requesting any 
 - Executes appropriate tool function
 - Scalable for adding multiple tools
 
-**Scalable Tool Routing**
+**Scalable Tool Routing** <br>
 To support multiple tools, create a routing function that maps tool names to their implementations:
 ```py
 def run_tool(tool_name, tool_input):
@@ -496,6 +496,17 @@ Result: Single request-response cycle instead of multiple sequential rounds for 
 ## Tools for Structured Data
 Tools for Structured Data = alternative method to extract structured JSON from data sources using Claude's tool system instead of message pre-fill and stop sequences.
 
+When you need structured data from Claude, you have two main approaches: prompt-based techniques using message prefills and stop sequences, or a more robust method using tools. While the prompt-based approach is simpler to set up, tools provide more reliable output at the cost of additional complexity.
+
+The tool-based approach works by creating a JSON schema that defines the exact structure of data you want to extract. Instead of hoping Claude formats its response correctly, you're essentially giving Claude a function to call with specific parameters that match your desired output structure.
+
+Here's how the process works:
+
+- Write a schema that describes the structure of data you're looking for
+- Force Claude to use a tool with the tool_choice parameter
+- Extract the structured data from the tool use response
+- No need to provide a follow-up response - you're done once you get the data
+
 Key differences from prompt-based extraction:
 - More reliable output
 - More complex setup
@@ -507,9 +518,15 @@ Core Process:
 3. Claude calls tool with structured arguments matching schema
 4. Extract JSON from tool use block (no tool result needed)
 
-Critical requirement = Force tool calling using tool_choice parameter:
+Critical requirement = A critical part of this technique is ensuring Claude actually calls your tool. You can control this behavior using the tool_choice parameter:
 - tool_choice = {"type": "tool", "name": "your_tool_name"}
 - Ensures Claude always calls specified tool
+
+Choices:
+- {"type": "auto"} - Model decides if it needs to use a tool (default)
+- {"type": "any"} - Model must use a tool, but can choose which one
+- {"type": "tool", "name": "TOOL_NAME"} - Model must use the specified tool
+For structured data extraction, you'll typically want the third option to guarantee Claude calls your specific schema tool.
 
 Implementation steps:
 1. Create schema definition for extraction tool
@@ -519,6 +536,40 @@ Implementation steps:
 
 Use cases = When reliability more important than simplicity. Prompt-based methods better for quick/simple extractions, tools better for complex/reliable extractions.
 
+**Implementation Example**<br>
+Let's say you want to extract a title, author, and key insights from an article. First, you'd create a tool schema:
+```py
+article_summary_schema = {
+    "name": "article_summary",
+    "description": "Extracts structured data from articles",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "title": {"type": "string"},
+            "author": {"type": "string"}, 
+            "key_insights": {
+                "type": "array",
+                "items": {"type": "string"}
+            }
+        }
+    }
+}
+```
+Then you'd call Claude with the tool and force its use:
+```py
+response = chat(
+    messages,
+    tools=[article_summary_schema],
+    tool_choice={"type": "tool", "name": "article_summary"}
+)
+```
+The response will contain a tool use block with your structured data in the input field. You can access it directly:
+```py
+structured_data = response.content[0].input
+```
+
+**When to Use Each Approach?**<br>
+Choose prompt-based structured output when you need something quick and simple. Use tools when you need guaranteed reliability and can handle the extra setup complexity. Both techniques are valuable depending on your specific use case and requirements.
 
 ## Fine Grained Tool Calling
 Tool Streaming = streaming API responses while using tools with Claude
