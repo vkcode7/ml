@@ -213,6 +213,35 @@ Benefits:
 
 Implementation pattern allows multiple search methodologies to work together while maintaining separate, isolated index classes.
 
+The Retriever class wraps multiple search indexes and provides a unified interface:
+```py
+class Retriever:
+    def __init__(self, *indexes: SearchIndex):
+        if len(indexes) == 0:
+            raise ValueError("At least one index must be provided")
+        self._indexes = list(indexes)
+    
+    def add_document(self, document: Dict[str, Any]):
+        for index in self._indexes:
+            index.add_document(document)
+    
+    def search(self, query_text: str, k: int = 1, k_rrf: int = 60):
+        # Get results from all indexes
+        all_results = []
+        for idx, results in enumerate(all_results):
+            for rank, (doc, _) in enumerate(results):
+                # Track document ranks across indexes
+                # Apply RRF scoring formula
+        # Return merged and sorted results
+```
+The key insight is that by maintaining consistent APIs across different search implementations, we can easily combine them without tight coupling.
+
+The beauty of this architecture is its extensibility. Since all indexes implement the same SearchIndex protocol with add_document() and search() methods, you can easily add new search methodologies:
+
+Want to add a keyword-based index? A graph-based search? A specialized domain index? Just implement the same interface and the Retriever will automatically incorporate it into the fusion process.
+
+This modular approach keeps each search implementation focused and testable while providing a clean way to combine their strengths in the final system.
+
 **Refer: 005_hybrid notebook**
 
 ## Reranking Results
@@ -220,13 +249,100 @@ Reranking = post-processing step that uses LLM to reorder search results by rele
 
 Process: Run vector + BM25 search → merge results → pass to LLM with prompt asking to rank documents by relevance → get reordered results.
 
+How Re-ranking Works?
+
+Re-ranking is conceptually simple. After running your vector index and BM25 index and merging the results, you add one more step: a re-ranker that uses Claude to intelligently reorder your search results.
+
 Implementation details: Use document IDs instead of full text for efficiency. LLM receives user query + candidate documents + instruction to return most relevant docs in decreasing order. Assistant message pre-fill + stop sequence ensures structured JSON output.
 
 Tradeoffs: Increases search accuracy by leveraging LLM's understanding of semantic relevance. Increases latency due to additional LLM call. Particularly effective when initial retrieval methods miss nuanced query intent (e.g., "ENG team" vs "engineering team").
 
 Example improvement: Query "What did engineering team do with incident 2023?" correctly prioritized software engineering section over cybersecurity section after reranking, despite hybrid search initially ranking it lower.
 
+**The process works like this:**
+
+- Take the merged results from your hybrid search
+- Send them to Claude with the user's original question
+- Ask Claude to return the most relevant documents in order of decreasing relevance
+- Use Claude's reordered list as your final results
+
+**The Re-ranking Prompt**
+
+The prompt structure is straightforward. You provide Claude with the user's question and all the documents that seem relevant, then ask for a simple task:
+```text
+You are tasked with finding the documents most relevant to a user's question.
+
+<user_question>
+What happened with INC-2023-Q4-011?
+</user_question>
+
+Here are documents that may be relevant:
+<documents>
+<document>Section 10...</document>
+<document>Section 2...</document>
+<document>Section 7...</document>
+<document>Section 6...</document>
+</documents>
+
+Return the 3 most relevant docs, in order of decreasing relevance.
+```
+
+**Efficiency Considerations** <br>
+There's an important efficiency consideration when implementing re-ranking. If you ask Claude to return the full text of each relevant chunk, you're essentially asking it to copy large amounts of text back to you. This is wasteful and slow.
+
+A better approach is to assign each text chunk a unique ID ahead of time, then ask Claude to return just those IDs in the correct order:
+```text
+<documents>
+<document>
+<id>ab84</id>
+<content>Section 10...</content>
+</document>
+<document>
+<id>51n3</id>
+<content>Section 8...</content>
+</document>
+</documents>
+```
+Claude can then return a simple list like ["1p5g", "51n3", "ab83"] instead of copying entire text chunks.
+
+**Implementation**
+The re-ranker function gets called automatically by your retriever after the initial hybrid search completes. Here's the basic structure:
+```py
+def reranker_fn(docs, query_text, k):
+    # Format documents with IDs
+    joined_docs = "\n".join([
+        f"""
+        <document>
+        <document_id>{doc["id"]}</document_id>
+        <document_content>{doc["content"]}</document_content>
+        </document>
+        """
+        for doc in docs
+    ])
+    
+    # Create prompt and get Claude's response
+    prompt = f"""..."""
+    messages = []
+    add_user_message(messages, prompt)
+    add_assistant_message(messages, """```json""")
+    
+    result = chat(messages, stop_sequences=["""```"""])
+    
+    return json.loads(result["text"])["document_ids"]
+```
+
+**Trade-offs** <br>
+Re-ranking comes with clear trade-offs:
+
+- Increased latency: You now have to wait for an additional API call to Claude
+- Increased accuracy: Claude can understand context and relevance in ways that pure vector similarity cannot
+For most applications, the accuracy improvement is worth the latency cost, especially when you're dealing with complex queries where semantic understanding matters more than pure keyword matching.
+
+**Refer: 006_reranking notebook**
+
 ## Contextual Retrieval
+Contextual retrieval is a technique that improves RAG pipeline accuracy by solving a fundamental problem: when you split a document into chunks, each chunk loses its connection to the broader document context.
+
 Contextual Retrieval = technique to improve RAG pipeline accuracy by adding context to document chunks before embedding.
 
 Problem: When documents are split into chunks, individual chunks lose context from the original document, reducing retrieval accuracy.
@@ -248,3 +364,64 @@ Large Document Handling: If source document too large for single prompt, use sel
 Implementation: add_context function takes text chunk + source text, generates context via LLM, concatenates context with original chunk, returns contextualized version.
 
 Benefit: Chunks retain ties to larger document structure and cross-references, improving retrieval accuracy for complex documents with interconnected sections.
+
+**Implementation Example**
+
+Here's a basic function for adding context to a single chunk:
+```py
+def add_context(text_chunk, source_text):
+    prompt = """
+    Write a short and succinct snippet of text to situate this chunk within the
+    overall source document for the purposes of improving search retrieval of the chunk.
+    
+    Here is the original source document:
+    <document>
+    {source_text}
+    </document>
+    
+    Here is the chunk we want to situate within the whole document:
+    <chunk>
+    {text_chunk}
+    </chunk>
+    
+    Answer only with the succinct context and nothing else.
+    """
+    
+    messages = []
+    add_user_message(messages, prompt)
+    result = chat(messages)
+    
+    return result["text"] + "\n" + text_chunk
+```
+For processing multiple chunks with limited context, you can select specific chunks to include:
+
+```py
+# Add context to each chunk, then add to the retriever
+num_start_chunks = 2
+num_prev_chunks = 2
+
+for i, chunk in enumerate(chunks):
+    context_parts = []
+    
+    # Initial set of chunks from the start of the doc
+    context_parts.extend(chunks[: min(num_start_chunks, len(chunks))])
+    
+    # Additional chunks ahead of the current chunk we're contextualizing
+    start_idx = max(0, i - num_prev_chunks)
+    context_parts.extend(chunks[start_idx:i])
+    
+    context = "\n".join(context_parts)
+    
+    contextualized_chunk = add_context(chunk, context)
+    retriever.add_document({"content": contextualized_chunk})
+```
+
+**Expected Results**
+
+When you run a search query with contextual retrieval, you'll get results that include both the generated context and the original chunk content. The context helps the retrieval system better understand what each chunk is about and how it relates to the broader document.
+
+For example, a contextualized chunk might start with: "This chunk is Section 2 of an Annual Interdisciplinary Research Review, detailing software engineering efforts to resolve stability issues in Project Phoenix..." followed by the original chunk text.
+
+This technique is especially valuable for complex documents where individual sections have many interconnections and references to other parts of the document. The added context helps ensure that relevant chunks are retrieved even when the search query doesn't exactly match the chunk's original text.
+
+**Refer: 007_contextual notebook**
