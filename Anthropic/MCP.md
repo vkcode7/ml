@@ -337,3 +337,138 @@ Prompt workflow:
 5. Returns messages array for direct feeding to LLM
 
 Key concept: Prompts are server-defined templates that clients can invoke with specific arguments to generate contextualized instructions for LLMs. Arguments flow from client call → prompt function → interpolated prompt text → LLM consumption.
+
+## OpenAI sample
+Here's the complete example using the Apify Weather MCP Server via Streamable HTTP; Apify now uses Streamable HTTP GitHub).
+
+```bash
+pip install openai mcp httpx
+```
+
+```py
+import json
+import httpx
+from openai import OpenAI
+
+openai_client = OpenAI(api_key="your-openai-api-key")
+
+APIFY_TOKEN = "your-apify-api-token"
+MCP_SERVER_URL = f"https://mcp.apify.com?tools=apify/weather-mcp-server&token={APIFY_TOKEN}"
+
+
+# --- MCP Streamable HTTP helpers ---
+
+def mcp_request(payload: dict) -> dict:
+    """Send a JSON-RPC request to the MCP server and return the response."""
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+    response = httpx.post(MCP_SERVER_URL, json=payload, headers=headers, timeout=30)
+    response.raise_for_status()
+    return response.json()
+
+
+def initialize_session() -> None:
+    mcp_request({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "weather-client", "version": "1.0.0"},
+        }
+    })
+
+
+def list_tools() -> list[dict]:
+    response = mcp_request({
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list",
+        "params": {}
+    })
+    return response["result"]["tools"]
+
+
+def call_tool(tool_name: str, args: dict) -> str:
+    response = mcp_request({
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+            "name": tool_name,
+            "arguments": args,
+        }
+    })
+    return response["result"]["content"][0]["text"]
+
+
+# --- Main flow ---
+
+def run():
+    # Connect & discover tools
+    initialize_session()
+    tools = list_tools()
+    print("Available tools:", [t["name"] for t in tools])
+
+    # Convert to OpenAI format
+    openai_tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": t["name"],
+                "description": t["description"],
+                "parameters": t["inputSchema"],
+            }
+        }
+        for t in tools
+    ]
+
+    # Step 1: Send user message to OpenAI
+    messages = [{"role": "user", "content": "What is the current weather in London?"}]
+
+    response = openai_client.chat.completions.create(
+        model="gpt-4o",
+        messages=messages,
+        tools=openai_tools,
+        tool_choice="auto",
+    )
+
+    response_message = response.choices[0].message
+
+    # Step 2: Handle tool call
+    if response_message.tool_calls:
+        messages.append(response_message)
+
+        for tool_call in response_message.tool_calls:
+            tool_name = tool_call.function.name
+            args = json.loads(tool_call.function.arguments)
+            print(f"\nOpenAI calling: '{tool_name}' with args: {args}")
+
+            # Step 3: Forward to Apify MCP server
+            tool_output = call_tool(tool_name, args)
+            print(f"MCP returned: {tool_output}")
+
+            # Step 4: Send result back to OpenAI
+            messages.append({
+                "role": "tool",
+                "tool_call_id": tool_call.id,
+                "content": tool_output,
+            })
+
+        # Step 5: Final response
+        final_response = openai_client.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+        )
+        print("\nAssistant:", final_response.choices[0].message.content)
+
+    else:
+        print("Assistant:", response_message.content)
+
+
+if __name__ == "__main__":
+    run()
+```
