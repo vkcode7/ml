@@ -27,6 +27,39 @@ Implementation:
 - Set thinking=true and thinking_budget parameter
 - Ensure max_tokens > thinking_budget for adequate response generation capacity
 
+```py
+ def chat(
+    messages,
+    system=None,
+    temperature=1.0,
+    stop_sequences=[],
+    tools=None,
+    thinking=False,
+    thinking_budget=1024,
+):
+    params = {
+        "model": model,
+        "max_tokens": 4000,
+        "messages": messages,
+        "temperature": temperature,
+        "stop_sequences": stop_sequences,
+    }
+
+    if thinking:
+        params["thinking"] = {
+            "type": "enabled",
+            "budget_tokens": thinking_budget,
+        }
+
+    if tools:
+        params["tools"] = tools
+
+    if system:
+        params["system"] = system
+
+    message = client.messages.create(**params)
+    return message
+```
 
 ## Image Support
 Claude Vision Capabilities = ability to process images within user messages for analysis, comparison, counting, and description tasks.
@@ -52,6 +85,27 @@ Implementation = base64 encode image data, create message with image block (type
 
 Key Takeaway = image accuracy depends entirely on prompt sophistication, not just image quality.
 
+```py
+with open("image.png", "rb") as f:
+    image_bytes = base64.standard_b64encode(f.read()).decode("utf-8")
+
+add_user_message(messages, [
+    # Image Block
+    {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/png",
+            "data": image_bytes,
+        }
+    },
+    # Text Block
+    {
+        "type": "text",
+        "text": "What do you see in this image?"
+    }
+])
+```
 
 ## PDF Support
 PDF Support in Claude:
@@ -69,6 +123,29 @@ PDF processing = one-stop solution for comprehensive document analysis
 
 Usage pattern = same as image input but with document-specific parameters
 
+```py
+with open("earth.pdf", "rb") as f:
+    file_bytes = base64.standard_b64encode(f.read()).decode("utf-8")
+
+messages = []
+
+add_user_message(
+    messages,
+    [
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": file_bytes,
+            },
+        },
+        {"type": "text", "text": "Summarize the document in one sentence"},
+    ],
+)
+
+chat(messages)
+```
 
 ## Citations
 Citations = feature allowing Claude to reference source documents and show where information comes from
@@ -90,6 +167,20 @@ UI benefit = enables citation popups/overlays showing source document, page numb
 
 Key use case = ensuring users can investigate how Claude builds responses from source materials rather than appearing to speak from memory alone
 
+To enable citations, you need to modify your document message structure. Add two new fields to your document block:
+```py
+{
+    "type": "document",
+    "source": {
+        "type": "base64",
+        "media_type": "application/pdf",
+        "data": file_bytes,
+    },
+    "title": "earth.pdf",
+    "citations": { "enabled": True }
+}
+```
+The title field gives your document a readable name, while citations: {"enabled": True} tells Claude to track where it finds information
 
 ## Prompt Caching
 Prompt Caching = feature that speeds up Claude's responses and reduces text generation costs by reusing computational work from previous requests.
@@ -102,11 +193,24 @@ Solution: Prompt caching stores the results of input message processing in tempo
 
 Key benefit: Reuses previous computational work to avoid redundant processing of repeated content.
 
+Prompt caching offers several advantages:
+
+- Faster responses: Requests using cached content execute more quickly
+- Lower costs: You pay less for the cached portions of your requests
+- Automatic optimization: The initial request writes to the cache, follow-up requests read from it
+
+However, there are important limitations to keep in mind:
+- Cache duration: Cached content only lives for one hour
+- Limited use cases: Only beneficial when you're repeatedly sending the same content
+- High frequency requirement: Most effective when the same content appears extremely frequently in your requests
+
 
 ## Rules of Prompt Caching
 Prompt Caching = system that saves processing work from initial request to reuse in follow-up requests with identical content
 
 Core mechanism: Initial request → Claude processes + saves work to cache → Follow-up requests with identical content → Claude retrieves cached work instead of reprocessing
+
+The process is straightforward: your initial request writes processing work to the cache, and follow-up requests can read from that cache instead of reprocessing the same content. The cache lives for one hour, so this feature is only useful if you're repeatedly sending the same content within that timeframe.
 
 Cache duration = 1 hour maximum
 
@@ -135,6 +239,17 @@ Minimum cache threshold = 1024 tokens required for content to be cached
 
 Best use cases = repeated identical content (system prompts, tool definitions, static message prefixes)
 
+Cross-Message Caching:
+
+Cache breakpoints can span across multiple messages and message types. If you place a breakpoint in a later message, all previous messages (user, assistant, etc.) will be included in the cached content.
+
+System Prompts and Tools: You're not limited to text blocks - cache breakpoints can be added to:
+- System prompts
+- Tool definitions
+- Image blocks
+- Tool use and tool result blocks
+
+You can add up to four cache breakpoints total. For example, you might cache your tools, then add another breakpoint partway through your conversation history. This gives you flexibility in what gets cached when different parts of your request change.
 
 ## Prompt Caching in Action
 Prompt Caching Implementation = automatically caches tool schemas and system prompts to reduce token usage
@@ -158,6 +273,7 @@ Cache Invalidation = any change to cached content (tools or system prompt) inval
 
 Use Cases = identical content across requests - same tool schemas, system prompts, or message sequences
 
+**Refer: 003_caching notebook**
 
 ## Code Execution and the Files API
 Files API = allows uploading files ahead of time and referencing them later via file ID instead of including raw file data in each request. Upload file → get file metadata object with ID → use ID in future requests.
@@ -173,3 +289,45 @@ Claude can generate files (plots, reports) inside container that can be download
 Use cases: Data analysis, file processing, automated code generation for complex tasks. Response contains code blocks, execution results, and final analysis.
 
 Implementation: Use container upload block with file ID, include analysis prompt, Claude handles code execution automatically.
+
+Here's how it works:
+- Upload your file (image, PDF, text, etc.) to Claude using a separate API call
+- Receive a file metadata object containing a unique file ID
+- Reference that file ID in future messages instead of including raw file data
+
+First, upload the file using a helper function:
+```py
+file_metadata = upload('streaming.csv')
+```
+
+Then create a message that includes both the uploaded file and a request for analysis:
+```py
+messages = []
+add_user_message(
+    messages,
+    [
+        {
+            "type": "text",
+            "text": """Run a detailed analysis to determine major drivers of churn.
+            Your final output should include at least one detailed plot summarizing your findings."""
+        },
+        {"type": "container_upload", "file_id": file_metadata.id},
+    ],
+)
+
+chat(
+    messages,
+    tools=[{"type": "code_execution_20250522", "name": "code_execution"}]
+)
+```
+
+### Beyond Data Analysis
+While data analysis is a natural fit, the combination of Files API and code execution opens up many possibilities:
+
+- Image processing and manipulation
+- Document parsing and transformation
+- Mathematical computations and modeling
+- Report generation with custom formatting
+The key is that you can delegate complex, computational tasks to Claude while maintaining control over the inputs and outputs through the Files API. This creates a powerful workflow where Claude becomes your coding assistant that can actually execute and iterate on solutions.
+
+**Refer: 005_code_execution notebook**
