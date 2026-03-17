@@ -28,6 +28,16 @@ Full setup guide = docs.anthropic.com
 
 MCP client functionality = can consume tools from MCP servers to extend capabilities beyond basic file operations
 
+Claude Code comes with a comprehensive set of tools to help with your development workflow:
+
+## What Claude Code can do?
+
+- File operations - Search, read, and edit files in your project
+- Terminal access - Run commands directly from the conversation
+- Web access - Search documentation, fetch code examples, and more
+- MCP Server support - Add additional tools by connecting MCP servers
+
+The MCP integration is particularly powerful because it means you can extend Claude Code's capabilities by adding specialized tools for databases, APIs, or any other services you work with.
 
 ## Claude Code in Action
 Claude Code = AI coding assistant that functions as a collaborative engineer on projects, not just a code generator.
@@ -63,8 +73,60 @@ Method 2 - Test-driven development:
 
 Core principle: Claude Code = effort multiplier. More detailed instructions = significantly better results. Treat as collaborative engineer, not just code generator.
 
+## The /init Command
+When you start working with Claude Code on a project, the first thing you'll want to do is run the /init command. This tells Claude to scan your entire codebase and understand your project's structure, dependencies, coding style, and architecture.
+
+Claude summarizes everything it learns in a special file called CLAUDE.md. This file automatically gets included as context in all future conversations, so Claude remembers important details about your project.
+
+You can have multiple CLAUDE.md files for different scopes:
+
+- Project - Shared between all engineers working on the project
+- Local - Your personal notes that aren't checked into git
+- User - Used across all your projects
+
+A sample claud.md file:
+```text
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## IMPORTANT: Docs-First Requirement
+
+**Before generating any code, Claude Code MUST first read and reference the relevant documentation files in the `/docs` directory.** Always check `/docs` for existing specs, designs, or guidelines that apply to the task at hand, and ensure all generated code aligns with those documents:
+
+- /docs/ui.md
+- /docs/data-fetching.md
+- /docs/auth.md
+- /docs/data-mutations.md
+- /docs/server-components.md
+- /docs/routing.md
+
+## Commands
+
+'''bash
+npm run dev      # Start development server
+npm run build    # Production build
+npm run lint     # Run ESLint
+'''
+
+No test framework is configured yet.
+
+## Architecture
+
+This is a **Next.js App Router** project using TypeScript and Tailwind CSS v4.
+
+- `src/app/` — All routes and layouts using file-based routing
+- `src/app/layout.tsx` — Root layout (Geist fonts, metadata, HTML shell)
+- `src/app/page.tsx` — Home page (`/`)
+- `src/app/globals.css` — Global styles; uses Tailwind v4 `@import` syntax and CSS custom properties for light/dark theming
+
+Path alias `@/*` maps to `src/*`.
+
+The project is a fresh Create Next App scaffold — no database, auth, or API routes exist yet.
+```
 
 ## Enhancements with MCP Servers
+
 Claude Code = AI assistant with embedded MCP (Model Context Protocol) client that can connect to MCP servers to expand functionality.
 
 MCP Server Integration = Connect external tools/services to Claude Code via command: \`claude mcp add [server-name] [startup-command]\`
@@ -78,6 +140,18 @@ Common Use Cases = Production monitoring (Sentry), project management (Jira), co
 Key Benefit = Significant flexibility increase for development workflows through modular server connections.
 
 Setup Process = 1) Create MCP server with tools, 2) Add server to Claude Code with name and startup command, 3) Restart Claude Code to access new capabilities.
+
+Setting Up an MCP Server
+
+Adding an MCP server to Claude Code is straightforward. You use the command line to register your server:
+```bash
+claude mcp add [server-name] [command-to-start-server]
+```
+For example, if you have a document processing server that starts with uv run main.py, you'd run:
+```bash
+claude mcp add documents uv run main.py
+```
+Once registered, Claude Code will automatically connect to your server when it starts up.
 
 ## Parallelizing Claude Code
 Parallelizing Claude Code = running multiple Claude instances simultaneously to complete different tasks in parallel
