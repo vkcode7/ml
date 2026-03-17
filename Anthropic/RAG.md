@@ -162,6 +162,16 @@ Implementation = Both semantic and lexical search systems use similar APIs (add_
 
 Next step = Merge results from both search systems to get benefits of semantic understanding plus exact term matching.
 
+What Gets Stored in a BM25 Index?
+```bash
+Unlike a vector DB (which stores float arrays), BM25 stores an inverted index — a classic IR data structure:
+Term          → [doc_id, term_freq, positions]
+─────────────────────────────────────────────
+"neural"      → [(doc3, 4, [12,45,67,89]), (doc7, 1, [3])]
+"retrieval"   → [(doc1, 2, [5,20]), (doc3, 1, [13])]
+"attention"   → [(doc2, 6, [1,4,7,9,11,15])]
+```
+
 **Implementing BM25 Search**
 
 Here's how to set up a basic BM25 search system:
@@ -192,6 +202,89 @@ BM25 excels at finding exact matches because it:
 The key insight is that both search methods have complementary strengths. Semantic search understands context and meaning, while lexical search ensures you don't miss exact term matches. By combining them, you create a more robust search system that handles both conceptual queries and specific lookups effectively.
 
 **Refer: 004_bm25 notebook**
+
+## Storing BM25
+
+On Disk
+```py
+import bm25s
+
+corpus = [
+    "BM25 is a keyword ranking algorithm",
+    "Vector databases store dense embeddings",
+    "Hybrid RAG combines BM25 and semantic search",
+]
+
+# --- Build & Save ---
+tokenized = bm25s.tokenize(corpus)
+index = bm25s.BM25()
+index.index(tokenized)
+
+index.save("bm25_store/")  # writes to disk
+# Saves:
+#   bm25_store/vocab.json       ← term dictionary
+#   bm25_store/scores.npz       ← compressed sparse score matrix
+#   bm25_store/params.json      ← k1, b, avgdl, num_docs
+```
+
+Pickle it:
+```py
+import pickle
+import bm25s
+
+# Save
+with open("bm25_index.pkl", "wb") as f:
+    pickle.dump(index, f)
+
+# Load
+with open("bm25_index.pkl", "rb") as f:
+    index = pickle.load(f)
+```
+
+Elasticsearch / OpenSearch (production)
+
+BM25 is Elasticsearch's default ranking algorithm. The index is stored as Lucene segment files on disk automatically.
+```python
+from elasticsearch import Elasticsearch
+
+es = Elasticsearch("http://localhost:9200")
+
+# --- Index documents (stored persistently on disk) ---
+for i, doc in enumerate(corpus):
+    es.index(index="rag-bm25", id=i, document={"text": doc})
+
+# --- Retrieve later (BM25 scoring built-in) ---
+results = es.search(
+    index="rag-bm25",
+    body={"query": {"match": {"text": "keyword ranking"}}}
+)
+
+for hit in results["hits"]["hits"]:
+    print(hit["_score"], hit["_source"]["text"])
+```
+Elasticsearch handles persistence, replication, and reloading automatically on restart.
+
+Redis (fast in-memory + persistence)
+```py
+Using redisvl which has built-in BM25 support:
+pythonfrom redisvl.index import SearchIndex
+from redisvl.query import FilterQuery
+
+schema = {
+    "index": {"name": "rag-bm25", "prefix": "doc"},
+    "fields": [{"name": "text", "type": "text"}],  # text = BM25 indexed
+}
+
+index = SearchIndex.from_dict(schema)
+index.connect("redis://localhost:6379")
+index.create(overwrite=True)
+
+# Load documents
+index.load([{"text": doc} for doc in corpus])
+
+# Redis persists via RDB snapshots or AOF logs on disk
+# On restart, index is restored automatically
+```
 
 ## A Multi-Index Rag Pipeline
 Multi-Index RAG Pipeline = system combining semantic search (vector index) and lexical search (BM25 index) for improved retrieval accuracy.
