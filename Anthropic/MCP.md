@@ -94,7 +94,16 @@ Expected outcome = working chat interface that responds to basic queries, ready 
 ## Defining Tools with MCP
 MCP server implementation using Python SDK creates tools through decorators rather than manual JSON schemas.
 
+Building an MCP server becomes much simpler when you use the official Python SDK. Instead of manually writing complex JSON schemas for tools, the SDK handles all that complexity for you with decorators and type hints.
+
 MCP Python SDK = Official package that auto-generates tool JSON schemas from Python function definitions using @mcp.tool decorator.
+
+The Python MCP SDK makes server creation incredibly straightforward. You can initialize a complete MCP server with just one line:
+```py
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("DocumentMCP", log_level="ERROR")
+```
 
 Tool definition syntax = @mcp.tool(name="tool_name", description="description") + function with typed parameters using Field() for argument descriptions.
 
@@ -110,14 +119,38 @@ Required imports = Field from pydantic for parameter descriptions, mcp package f
 
 Implementation pattern = Decorator defines tool metadata, function parameters define tool arguments with types and descriptions, function body contains tool logic.
 
+The first tool allows Claude to read any document by its ID. Here's the complete implementation:
+```py
+@mcp.tool(
+    name="read_doc_contents",
+    description="Read the contents of a document and return it as a string."
+)
+def read_document(
+    doc_id: str = Field(description="Id of the document to read")
+):
+    if doc_id not in docs:
+        raise ValueError(f"Doc with id {doc_id} not found")
+    
+    return docs[doc_id]
+```
+The @mcp.tool decorator automatically generates the JSON schema that Claude needs. The Field class from Pydantic provides parameter descriptions that help Claude understand what each argument expects.
+
 ## The Server Inspector
 MCP Inspector = in-browser debugger for testing MCP servers without connecting to applications
 
 Access: Run \`mcp dev [server_file.py]\` in terminal → opens server on port → navigate to provided URL in browser
 
+_mcp dev mcp_server.py_
+
+This starts a development server on port 6277 and gives you a local URL to open in your browser. The inspector interface will load, showing the MCP Inspector dashboard.
+
+Click the "Connect" button on the left side to start your MCP server. Once connected, you'll see a navigation bar with sections for Resources, Prompts, Tools, and other features.
+
 Interface: Left sidebar has connect button → top menu shows resources/prompts/tools sections → tools section lists available tools → click tool to open right panel for manual testing
 
 Testing workflow: Connect to server → navigate to tools → select specific tool → input required parameters → click run tool → verify output
+
+For example, to test a document reading tool, you'd enter a document ID (like "deposition.md") and run the tool. The inspector shows the result, including any returned content or success messages.
 
 Key features: Live development testing, manual tool invocation, parameter input forms, success/failure feedback, no need for full application integration
 
@@ -127,8 +160,18 @@ Example usage: Test document tools by inputting document IDs, verify read operat
 
 Primary benefit: Debug MCP server implementations efficiently during development phase
 
+### Development Workflow
+The inspector creates an efficient development loop:
+
+- Make changes to your MCP server code
+- Test individual tools through the inspector
+- Verify results without needing a full application setup
+- Debug issues in isolation
+This tool becomes essential as you build more complex MCP servers. It eliminates the need to wire up your server to Claude or another application just to test basic functionality, making development much faster and more focused.
 
 ## Implementing a Client
+The client is what allows our application to communicate with the MCP server and access its functionality.
+
 MCP Client Implementation:
 
 MCP Client = wrapper class around client session for resource cleanup and connection management to MCP server
