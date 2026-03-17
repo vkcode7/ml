@@ -1,4 +1,6 @@
 # Overview of Claude Models
+https://github.com/anthropics/courses/tree/master/anthropic_api_fundamentals
+
 Claude has three model families optimized for different priorities:
 
 Opus = highest intelligence model for complex, multi-step tasks requiring deep reasoning and planning. Trade-off: higher cost and latency.
