@@ -1,5 +1,25 @@
 # MCP
 ## Introducing MCP
+
+Model Context Protocol (MCP) is a communication layer that provides Claude with context and tools without requiring you to write a bunch of tedious integration code. Think of it as a way to shift the burden of tool definitions and execution away from your server to specialized MCP servers.
+
+### Understanding MCP Through a Real Example
+Let's say you're building a chat interface where users can ask Claude about their GitHub data. A user might ask "What open pull requests are there across all my repositories?" To answer this, Claude needs tools to access GitHub's API.
+
+Without MCP, you'd need to create all the GitHub integration tools yourself. This means writing schemas and functions for every piece of GitHub functionality you want to support.
+
+### How MCP Solves This
+MCP shifts the burden of tool definitions and execution from your server to MCP servers. Instead of you writing all those GitHub tools, they're authored and executed inside a dedicated MCP server.
+
+The MCP server acts as a wrapper around GitHub's functionality, providing pre-built tools that you can use without having to implement them yourself.
+
+MCP servers provide access to data or functionality implemented by outside services. They package up complex integrations into reusable components that any application can connect to.
+
+### Isn't MCP Just Tool Use?
+This is a common misconception. MCP servers and tool use are complementary but different concepts. MCP is about who does the work of creating and maintaining the tools. With MCP, someone else has already written the tool functions and schemas for you - they're packaged inside the MCP server.
+
+The key insight is that MCP servers provide tool schemas and functions already defined for you, eliminating the need to build and maintain complex integrations yourself.
+
 MCP = Model Context Protocol, communication layer providing Claude with context and tools without requiring developers to write tedious code.
 
 Architecture: MCP client connects to MCP server. Server contains tools, resources, and prompts as internal components.
@@ -18,6 +38,8 @@ Common questions:
 Core value: Shifts integration burden from application developers to MCP server maintainers.
 
 ## MCP Clients
+The MCP client serves as the communication bridge between your server and MCP servers. Think of it as your access point to all the tools that an MCP server provides. When you need to use external tools or services, the client handles all the message passing and protocol details for you.
+
 MCP Client = communication interface between your server and MCP server, provides access to server's tools
 
 Transport agnostic = client/server can communicate via multiple protocols (stdio, HTTP, WebSockets)
