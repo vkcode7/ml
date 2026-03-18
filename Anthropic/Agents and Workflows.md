@@ -3,6 +3,8 @@
 ## Agents and Workflows
 Workflows and agents = strategies for handling user tasks that can't be completed by Claude in a single request.
 
+Workflows are a series of calls to Claude meant to solve a specific problem through a predetermined series of steps. Agents give Claude a goal and a set of tools, expecting Claude to figure out how to complete the goal through the provided tools.
+
 Decision rule: Use workflows when you have precise task understanding and know exact steps sequence. Use agents when task details are unclear.
 
 Workflow = series of calls to Claude for specific problems where steps are predetermined.
@@ -78,6 +80,20 @@ Use case: Social media video script generation where different topics require di
 
 ## Agents and Tools
 Agents = AI systems that create plans to complete tasks using provided tools, effective when exact steps are unknown. Workflows = better when precise steps are known.
+
+Agents represent a shift from the structured workflows we've been working with. While workflows are perfect when you know the exact steps needed to complete a task, agents shine when you're not sure what those steps should be. Instead of defining a rigid sequence, you give Claude a goal and a set of tools, then let it figure out how to combine those tools to achieve the objective.
+
+The real power of agents lies in their ability to combine simple tools in unexpected ways.
+
+Claude Code has access to generic, flexible tools like:
+```text
+bash - Run any command
+read - Read any file
+write - Create any file
+edit - Modify files
+glob - Find files
+grep - Search file contents
+```
 
 Key differences: Workflows require predetermined steps, agents dynamically plan using available tools.
 
