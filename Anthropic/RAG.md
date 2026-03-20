@@ -203,6 +203,35 @@ The key insight is that both search methods have complementary strengths. Semant
 
 **Refer: 004_bm25 notebook**
 
+```py
+import bm25s
+import numpy as np
+
+corpus = [
+    "BM25 is a keyword ranking algorithm",
+    "Vector databases store dense embeddings",
+    "Hybrid RAG combines BM25 and semantic search",
+]
+
+# --- BM25 Index ---
+tokenized = bm25s.tokenize(corpus)
+bm25_index = bm25s.BM25()
+bm25_index.index(tokenized)
+
+# Save BM25 index to disk (stored as compressed arrays)
+bm25_index.save("bm25_index/")  # saves vocab + scores + doc stats
+
+# Query
+query_tokens = bm25s.tokenize(["keyword ranking"])
+bm25_results, bm25_scores = bm25_index.retrieve(query_tokens, k=2)
+print("BM25 hits:", bm25_results)
+```
+
+The save() call writes:
+- vocab.json — term dictionary
+- scores.npz — compressed sparse matrix of BM25 scores
+- params.json — k1, b, avgdl, doc count
+
 ## Storing BM25
 
 On Disk
