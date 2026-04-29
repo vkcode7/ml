@@ -17,6 +17,53 @@ https://poloclub.github.io/transformer-explainer/
 
 The Transformer architecture was introduced in the 2017 paper:
 
+---
+
+Here's a structured way to explain it in an interview:
+
+---
+
+## One-liner first
+> "A Transformer is a neural network architecture that processes text by learning which parts of the input to pay attention to when predicting each output token."
+
+---
+
+## Core idea: Attention
+Before Transformers, RNNs processed text **sequentially** — slow and forgetful over long sequences. Transformers process the **entire sequence in parallel** using **self-attention**, which lets every token look at every other token and decide how relevant each one is.
+
+> *"The word 'bank' means different things near 'river' vs 'money' — attention captures that."*
+
+---
+
+## Key components (keep it high-level unless asked to go deeper)
+
+- **Embeddings** — converts tokens to vectors
+- **Self-Attention** — each token attends to all others (via Q, K, V matrices)
+- **Multi-head Attention** — runs attention multiple times in parallel to capture different relationships
+- **Feed-forward layers** — processes each token independently after attention
+- **Positional encoding** — injects word order (since attention itself is order-agnostic)
+- **Layer normalization + residual connections** — stabilizes training
+
+---
+
+## In the Gen AI context specifically
+
+| Concept | What to say |
+|--------|-------------|
+| **LLMs** | GPT, Claude, Llama are all decoder-only Transformers trained to predict the next token |
+| **BERT** | Encoder-only, used for understanding/classification |
+| **T5, BART** | Encoder-decoder, used for translation/summarization |
+| **Scaling** | Transformers scale well — more data + parameters = emergent capabilities |
+| **Context window** | The max sequence length attention can span (e.g. 200k tokens in Claude) |
+
+---
+
+## Closer line
+> "The reason Transformers dominate Gen AI is that attention is parallelizable, scales with compute, and naturally captures long-range dependencies in language — things RNNs fundamentally struggled with."
+
+----
+
+
 
 **Attention Is All You Need**
 
