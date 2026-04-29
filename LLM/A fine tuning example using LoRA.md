@@ -5,6 +5,8 @@ Below is a **clean end-to-end example** of how you would LoRA-fine-tune an OpenA
 > So you fine-tune via API; LoRA happens under the hood.
 
 ---
+LoRA (Low-Rank Adaptation) fine-tuning works by freezing the pre-trained weights of a large model and injecting small, trainable, low-rank adapter matrices into its layers. Instead of updating all billions of parameters, only these small matrices are updated, drastically reducing GPU memory and storage needs. During inference, these adapter weights are added back to the base model, delivering high performance. 
+---
 
 # 🎯 Goal
 
