@@ -19,10 +19,6 @@ The Transformer architecture was introduced in the 2017 paper:
 
 ---
 
-Here's a structured way to explain it in an interview:
-
----
-
 ## One-liner first
 > "A Transformer is a neural network architecture that processes text by learning which parts of the input to pay attention to when predicting each output token."
 
