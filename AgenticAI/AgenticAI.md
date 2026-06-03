@@ -112,3 +112,21 @@ The key components of a React agent's reasoning process are:
 - Final Answer: The complete response the agent provides based on the observations and reasoning.
   
 These components work together in a structured sequence to enable step-by-step reasoning and tool use.
+
+# Agentic RAG pipeline.
+
+Retrieval Augmented Generation (RAG) Basics
+
+RAG enhances large language model (LLM) responses by incorporating relevant data retrieved from a vector database as context in the prompt.
+This grounding in concrete information improves the quality and reliability of the LLM's generated output.
+
+Agentic RAG Pipeline
+
+- Unlike typical RAG that calls the LLM once for response generation, agentic RAG uses the LLM as an agent to make intelligent decisions.
+- The agent can decide which vector database to query among multiple sources and determine the type of response (text, chart, code snippet) based on query context.
+
+Multi-Source Data and Intelligent Query Routing
+
+- The pipeline can include multiple vector databases, such as internal documentation and general industry knowledge.
+- The agent interprets the query context to route it to the most relevant database or a fail-safe response if the query is unrelated to available data.
+- This approach improves relevance, accuracy, and adaptability, with applications in customer support, legal tech, healthcare, and more.
