@@ -1,0 +1,7 @@
+# requirements.txt
+elasticsearch[async]==8.13.0
+qdrant-client==1.9.1
+sentence-transformers==3.0.1
+rank-bm25==0.2.2
+numpy>=1.26
+openai>=1.30          # optional — any OpenAI-compatible client for answer gen
