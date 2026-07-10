@@ -3,6 +3,9 @@
 
 Model Context Protocol (MCP) is a communication layer that provides Claude with context and tools without requiring you to write a bunch of tedious integration code. Think of it as a way to shift the burden of tool definitions and execution away from your server to specialized MCP servers.
 
+## All about MCP
+https://sunsushil.wordpress.com/2025/08/22/all-about-mcp-server/
+
 ### Understanding MCP Through a Real Example
 Let's say you're building a chat interface where users can ask Claude about their GitHub data. A user might ask "What open pull requests are there across all my repositories?" To answer this, Claude needs tools to access GitHub's API.
 
