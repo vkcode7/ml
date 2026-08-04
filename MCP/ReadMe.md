@@ -141,3 +141,131 @@ mcp-weather/
 ├── weather_server.py    ← the MCP server (this file)
 └── README.md
 ```
+
+## To run the client
+```
+pip install -r requirements.txt
+export OPENAI_API_KEY=sk-...
+
+python zip_overview.py 10001   # New York
+python zip_overview.py 90210   # Beverly Hills
+python zip_overview.py 60601   # Chicago
+python zip_overview.py         # prompts for input
+```
+
+## How it works
+```
+User: python zip_overview.py 10001
+           │
+           ▼
+    GPT-5.4 (Responses API)
+    "I need weather data — calling get_weather tool"
+           │
+           ▼ tool_call: get_weather("10001")
+    dispatch_tool() in zip_overview.py
+           │
+           ▼ calls directly
+    get_weather() from weather_server.py
+           │
+           ├── Nominatim API → lat/lon + city name
+           └── Open-Meteo   → live weather data
+           │
+           ▼ WeatherResult JSON returned to GPT-5.4
+    GPT-5.4 combines live weather + its own knowledge
+           │
+           ▼
+    Printed output with 4 sections:
+      📍 Location (city, county, state, timezone, area code)
+      👥 Demographics (population, income — from GPT knowledge)
+      🌤 Current Weather (live from MCP server)
+      📌 Quick Facts
+```
+
+**Key design point:** The get_weather and get_weather_bulk functions from weather_server.py are plain async Python functions — so zip_overview.py imports and calls them directly without needing to run the MCP server as a separate process. This is the right pattern when both files are in the same project.
+
+
+## Running it as separate MCP server
+That requires running the MCP server as a separate process and communicating with it over stdio transport using the MCP client SDK. Here's the updated version:Here's exactly what changed and why:
+
+---
+
+### The core difference — `call_mcp_weather()`
+
+The original `zip_overview.py` did this:
+```python
+# Direct Python import — no MCP involved at all
+from weather_server import get_weather
+result = await get_weather("10001")
+```
+
+The new `zip_overview_mcp.py` does this instead:
+```python
+async with stdio_client(server_params) as (read, write):
+    async with ClientSession(read, write) as session:
+        await session.initialize()           # MCP handshake
+        result = await session.call_tool(    # JSON-RPC call
+            name="get_weather",
+            arguments={"zip_code": zip_code}
+        )
+```
+
+`stdio_client` spawns `weather_server.py` as a real child process and pipes JSON-RPC messages through its stdin/stdout. The MCP protocol handshake happens, tools are discovered, and the call is made — exactly as Claude Desktop would do it.
+
+---
+
+### What happens under the hood when `call_mcp_weather()` runs
+
+```
+zip_overview_mcp.py (parent process)
+  │
+  │  spawns as subprocess
+  ▼
+weather_server.py (child process)
+  │
+  ├── stdin  ← JSON-RPC requests from client
+  │     {"jsonrpc":"2.0","method":"tools/call",
+  │      "params":{"name":"get_weather",
+  │               "arguments":{"zip_code":"10001"}}}
+  │
+  └── stdout → JSON-RPC responses back to client
+        {"jsonrpc":"2.0","result":{"content":[...]}}
+```
+
+---
+
+### The new file structure
+
+```
+mcp-weather/
+├── weather_server.py       ← MCP server (runs as subprocess)
+├── zip_overview.py         ← original (imports directly)
+├── zip_overview_mcp.py     ← new (calls via MCP transport)
+└── requirements.txt
+```
+
+---
+
+### To run it
+
+```bash
+export OPENAI_API_KEY=sk-...
+
+# Both files must be in the same directory
+python zip_overview_mcp.py 10001
+```
+
+The output will show the MCP interaction happening live:
+```
+🔍 Looking up zip code 10001...
+
+  📡 MCP server tools: ['get_weather', 'get_weather_bulk']
+  🌐 GPT-5.4 requested tool: get_weather({'zip_code': '10001'})
+  🔧 Calling get_weather via MCP for zip: 10001
+  ✅ MCP returned: New York City, New York — 72.3°F, Partly cloudy
+
+============================================================
+📍 LOCATION
+  ...
+```
+
+
