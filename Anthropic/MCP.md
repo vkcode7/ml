@@ -747,6 +747,9 @@ Common deployment issue = Application works fine locally with standard I/O trans
 
 Solution exists = StreamableHTTP transport has workarounds for server-to-client communication challenges, but with caveats.
 
+StreamableHTTP is MCP's solution to a fundamental problem: some MCP functionality requires the server to make requests to the client, but HTTP makes this challenging. Let's explore how StreamableHTTP works around this limitation and when you might need to break that workaround.
+
+Some MCP features like sampling, notifications, and logging rely on the server initiating requests to the client. However, HTTP is designed for clients to make requests to servers, not the other way around. StreamableHTTP solves this with a clever workaround using Server-Sent Events (SSE).
 
 ### StreamableHTTP in Depth
 StreamableHTTP Transport = HTTP-based MCP transport using server-sent events (SSE) to enable server-to-client communication
@@ -763,17 +766,36 @@ Initialization Flow:
 3. Client sends initialized notification with session ID
 4. Client optionally makes GET request with session ID to establish SSE connection
 
+When the client makes a tool call, things get more complex. The system creates two separate SSE connections:
+
 Two SSE Connections:
 1. Long-lived SSE connection = For server-initiated requests (sampling, notifications)
 2. Short-lived SSE connection = For specific tool call responses, automatically closed after result
 
-Message Routing:
+The SSE Workaround:
+
+After initialization, the client can make a GET request to establish a Server-Sent Events connection. This creates a long-lived HTTP response that the server can use to stream messages back to the client at any time.
+
+This SSE connection is the key to allowing server-to-client communication. The server can now send requests, notifications, and other messages through this persistent channel.
+
+Message Routing
+Different types of messages get routed through different connections:
+
+Progress notifications: Sent through the primary SSE connection
+Logging messages and tool results: Sent through the tool-specific SSE connection
+
 - Progress notifications → Long-lived SSE connection
 - Logging messages + tool results → Short-lived SSE connection tied to specific request
 
 Key Limitation: Setting certain flags to true breaks the workaround, making StreamableHTTP complex to understand and use properly
 
 Critical Point: SSE responses enable bidirectional communication over HTTP by keeping connections open and streaming individual messages from server to client
+
+Key Takeaways:
+
+StreamableHTTP is more complex than other MCP transports because it has to work around HTTP's limitations. The SSE-based workaround enables full MCP functionality over HTTP, but understanding the dual-connection model is crucial for debugging and optimization.
+
+When building MCP applications with StreamableHTTP, remember that session IDs are required for all requests after initialization, and the system automatically manages multiple SSE connections to handle different types of server-to-client communication.
 
 
 ### Stateless HTTP
