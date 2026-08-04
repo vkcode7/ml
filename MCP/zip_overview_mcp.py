@@ -97,6 +97,15 @@ async def call_mcp_weather(zip_code: str) -> dict:
         env=None,                        # inherit current environment
     )
 
+    """
+    # New (remote HTTP server):
+    from mcp.client.streamable_http import streamable_http_client
+    
+    MCP_SERVER_URL = "https://weather-mcp-server.azurewebsites.net/mcp"
+    
+    async with streamable_http_client(MCP_SERVER_URL) as (read, write, _):
+        async with ClientSession(read, write) as session:
+    """
     async with stdio_client(server_params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
 
