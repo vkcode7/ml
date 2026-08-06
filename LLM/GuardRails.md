@@ -383,3 +383,132 @@ You can also run a local GLiNER server (NVIDIA provides examples) or use the hos
 - Combine it with regex for ultra-structured fields (SSN, credit cards) for best results.  
 - Keep a small LLM only for highly ambiguous/contextual cases if needed.
 
+
+## Schema Enforcement
+
+**Guardrails can enforce schema constraints very effectively** — this is one of their strongest use cases.
+
+Schema constraints mean forcing the LLM output to match a precise structure: required fields, correct types, enums, ranges, nested objects, lists of fixed length, regex patterns, etc.
+
+### Best Tool for Schema Enforcement: **Guardrails AI**
+
+While NeMo Guardrails is excellent for conversational policy, safety, and PII, **Guardrails AI** is purpose-built for structured output validation and schema enforcement. It combines:
+
+- **Pydantic models** or **RAIL (XML) specs** to define the schema
+- Automatic prompt engineering / function calling to guide the LLM
+- Runtime validation of the output
+- Automatic corrective actions (`reask`, `fix`, `filter`, `exception`) when the schema is violated
+
+### 1. Using Guardrails AI with Pydantic (Recommended)
+
+```python
+from pydantic import BaseModel, Field
+from typing import List, Literal
+from guardrails import Guard
+from guardrails.hub import ValidRange, ValidChoices, ValidLength
+import openai
+
+# Define the exact schema you want
+class Address(BaseModel):
+    street: str
+    city: str
+    zip_code: str = Field(pattern=r"^\d{5}(-\d{4})?$")
+
+class UserProfile(BaseModel):
+    name: str = Field(min_length=2, max_length=50)
+    age: int = Field(validators=[ValidRange(min=0, max=120)])
+    email: str
+    role: Literal["admin", "user", "guest"]
+    tags: List[str] = Field(validators=[ValidLength(min=1, max=5)])
+    address: Address
+
+# Create a Guard from the Pydantic model
+guard = Guard.for_pydantic(output_class=UserProfile)
+
+# Call the LLM through the Guard
+result = guard(
+    openai.chat.completions.create,
+    model="gpt-4o",
+    messages=[{
+        "role": "user",
+        "content": "Create a realistic user profile for a 34-year-old software engineer named Alex living in Austin."
+    }],
+    temperature=0
+)
+
+print(result.validated_output)
+```
+
+**What happens under the hood:**
+1. Guardrails injects the schema into the prompt (or uses function calling).
+2. The model generates JSON.
+3. Guardrails validates it against the Pydantic model + extra validators.
+4. If invalid → it can automatically **reask** the model with feedback, or fix/filter the output.
+
+### 2. Using RAIL (XML) Spec
+
+You can also define the schema in RAIL format:
+
+```xml
+<rail version="0.1">
+  <output>
+    <object name="user_profile">
+      <string name="name" required="true" format="length: 2 50"/>
+      <integer name="age" format="min-val: 0; max-val: 120"/>
+      <string name="email" format="email"/>
+      <string name="role" format="valid-choices: {['admin','user','guest']}"/>
+      <list name="tags" format="min-len: 1; max-len: 5">
+        <string/>
+      </list>
+    </object>
+  </output>
+</rail>
+```
+
+Then:
+
+```python
+guard = Guard.for_rail("schema.rail")
+```
+
+### 3. Combining with NeMo Guardrails
+
+A common production pattern is:
+
+```text
+User Input
+   ↓
+NeMo Guardrails (input rails: PII, toxicity, jailbreak)
+   ↓
+LLM (OpenAI)
+   ↓
+Guardrails AI (schema validation + reask if needed)
+   ↓
+Final validated structured output
+```
+
+You can also write a custom NeMo **output rail** that calls Pydantic/Guardrails AI validation.
+
+### 4. Native OpenAI Structured Outputs (Complementary)
+
+OpenAI’s native structured outputs (`response_format` with JSON Schema or `strict: true`) already enforce schema at the model level. Guardrails AI works *on top* of this for extra validators (business rules, ranges, regex, cross-field checks, etc.).
+
+### Summary of Approaches
+
+| Approach                    | Strengths                              | Best For                          |
+|----------------------------|----------------------------------------|-----------------------------------|
+| **Guardrails AI + Pydantic** | Full schema + custom validators + reask | Most production structured tasks |
+| **Guardrails AI + RAIL**    | Declarative XML schemas                | Complex nested structures        |
+| **OpenAI Structured Outputs** | Built-in, very reliable                | Simple-to-medium JSON schemas    |
+| **NeMo custom output rail** | Integrates with existing NeMo flows    | When already using NeMo heavily  |
+| **Manual Pydantic after LLM** | Simple                                 | Lightweight cases                |
+
+---
+
+**Recommendation**:  
+For serious schema enforcement, use **Guardrails AI with Pydantic**. It gives you the cleanest developer experience and the strongest guarantees (type safety + automatic correction).
+
+Would you like a full working example that combines:
+- NeMo Guardrails (for PII + toxicity) + 
+- Guardrails AI (for strict schema enforcement) + 
+- OpenAI?
